@@ -1,7 +1,7 @@
 # Executive Black Wallet
 
-Private-design Android visual companion for Google Wallet. **Not a payment app** and not affiliated with BMW, Revolut or Mastercard. Payments are handled exclusively by the Android default NFC wallet. System overlays cannot be blocked or replaced.
+Privates BMW-inspiriertes Gestaltungskonzept – **keine offizielle BMW-App und keine NFC-Zahlungs-App**. Revolut ist ausschließlich in Google Wallet hinterlegt, das als Standard-Zahlungsdienst bezahlt. Die eigene Oberfläche kann Android-Systemdialoge nicht verhindern.
 
-Build: GitHub Actions > Build APK > download `executive-black-debug-apk` after successful run.
+Automatischer Build: Actions > Build Android Debug APK. Danach `executive-black-debug-apk` herunterladen, entpacken und `app-debug.apk` installieren.
 
-Never enter card numbers, CVV or bank logins into this demo app.
+Keine Kartendaten, keine CVV, keine Bank-Zugangsdaten speichern.
