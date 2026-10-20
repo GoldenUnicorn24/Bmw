@@ -3,7 +3,7 @@
   android:description="@string/demo_hce_description"
   android:requireDeviceUnlock="true"
   android:apduServiceBanner="@drawable/ic_executive">
-  <aid-group android:description="@string/demo_aid_description" android:category="payment">
-    <aid-filter android:name="F0112233445566"/>
+  <aid-group android:description="@string/demo_aid_description" android:category="other">
+    <aid-filter android:name="F00102424D57"/>
   </aid-group>
 </host-apdu-service>
