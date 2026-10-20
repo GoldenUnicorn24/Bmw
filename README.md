@@ -1,12 +1,12 @@
 # Executive Black v0.7 – Tap Companion (Samsung / Google Wallet)
 
-Standalone BMW-inspired card presentation with a **genuine Android wallet-role check** (Android 15+, API 35), instant full-screen card on launch, and an optional Samsung Quick Settings tile **Executive Card**. Existing artwork `app/src/main/assets/card-front.jpg` unchanged.
+Standalone BMW-inspired card presentation with a check for installed Google Wallet and Android wallet role support (Android 15+, API 35), instant full-screen card on launch, and an optional Samsung Quick Settings tile **Executive Card**. Existing artwork `app/src/main/assets/card-front.jpg` unchanged.
 
 **Important:** Executive Black is a presentation/companion app; **not** a payment wallet. Contactless payment remains fully handled by Google Wallet and the issuer. Android/Google may overlay payment authentication or card UI, and this app cannot suppress it. It does not receive the Mastercard token, verify a successful transaction, or call a Google payment SDK.
 
 ## What's new
 - Opening the app immediately displays the Executive Black full-screen card. Close to access settings and NFC diagnostics.
-- Integrated local check of the Android 15+ default wallet role: whether Google Wallet is selected, another holder, none or unknown.
+- Checks whether Google Wallet is installed, NFC is enabled and (Android 15+) whether Executive itself holds the Wallet role. Android does not publicly expose the identity of another app's Wallet role holder; users must verify Google Wallet is selected in settings.
 - Does NOT automatically launch Google Wallet from the presentation view: Android's **default wallet** continues handling real payments via the OS.
 - Optional **Executive Card** Quick Settings tile: edit the notification shade's Quick Settings tiles, add the tile, then tap to launch the card. Device must be unlocked when required.
 - Demo HCE component is disabled by default to avoid accidental NFC-test mode during real payment. In NFC LAB, manually enable only for two-device testing, then disable again. The proprietary `F00102424D57` demo AID never imitates Mastercard.
