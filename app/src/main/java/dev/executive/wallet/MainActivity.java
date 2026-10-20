@@ -1,6 +1,9 @@
 package dev.executive.wallet;
 
 import android.app.Activity;
+import android.app.role.RoleManager;
+import android.os.Build;
+import android.content.ComponentName;
 import android.os.Bundle;
 import android.graphics.Color;
 import android.nfc.NfcAdapter;
@@ -43,6 +46,10 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     s.setAllowUniversalAccessFromFileURLs(false);
     s.setAllowFileAccessFromFileURLs(false);
     web.setWebViewClient(new WebViewClient(){
+      @Override public void onPageFinished(WebView v,String url) {
+        if (url!=null && url.startsWith("file:///android_asset/"))
+          v.evaluateJavascript("stage(true);refreshPayment();", null);
+      }
       @Override public boolean shouldOverrideUrlLoading(WebView v, android.webkit.WebResourceRequest r){
         return !r.getUrl().toString().startsWith("file:///android_asset/");
       }
@@ -55,7 +62,13 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
 
   @Override protected void onResume(){
     super.onResume();
-    if(web!=null) web.post(()->web.evaluateJavascript("status();if(window.updateLab)updateLab();",null));
+    if(web!=null) web.post(()->web.evaluateJavascript("status();if(window.updateLab)updateLab();if(window.refreshPayment)refreshPayment();",null));
+  }
+
+  @Override protected void onNewIntent(Intent intent){
+    super.onNewIntent(intent);
+    setIntent(intent);
+    if(web!=null)web.post(()->web.evaluateJavascript("stage(true);refreshPayment();",null));
   }
 
   @Override protected void onPause(){
@@ -112,6 +125,13 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
       .putLong("last_reader_time",System.currentTimeMillis()).apply();
   }
 
+  private boolean isLabEnabled(){
+    PackageManager pm=getPackageManager();
+    int mode=pm.getComponentEnabledSetting(new ComponentName(this,DemoCardService.class));
+    // The demo component is disabled by default in the manifest.
+    return mode==PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
+  }
+
   class Bridge {
     @JavascriptInterface public String state(){
       JSONObject o=new JSONObject();
@@ -124,6 +144,42 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
       return o.toString();
     }
 
+    /** The phone's actual payment wallet remains independent of this display app. */
+    @JavascriptInterface public String paymentState(){
+      JSONObject o=new JSONObject();
+      try {
+        o.put("nfcOn",adapter!=null && adapter.isEnabled());
+        o.put("labEnabled",isLabEnabled());
+        o.put("secureLock",((KeyguardManager)getSystemService(Context.KEYGUARD_SERVICE)).isDeviceSecure());
+        o.put("googleInstalled",getPackageManager().getLaunchIntentForPackage("com.google.android.apps.walletnfcrel")!=null);
+        String choice="unknown";
+        if(Build.VERSION.SDK_INT>=35){
+          RoleManager role=(RoleManager)getSystemService(Context.ROLE_SERVICE);
+          if(role!=null && role.isRoleAvailable(RoleManager.ROLE_WALLET)){
+            java.util.List<String> holders=role.getRoleHolders(RoleManager.ROLE_WALLET);
+            if(holders.contains("com.google.android.apps.walletnfcrel"))choice="google";
+            else if(!holders.isEmpty())choice="other";
+            else choice="none";
+          }
+        }
+        o.put("walletDefault",choice);
+      }catch(Exception ignored){}
+      return o.toString();
+    }
+
+    @JavascriptInterface public void setLabEnabled(boolean enabled){
+      runOnUiThread(()->{
+        if(readerMode)setReader(false);
+        try{
+          getPackageManager().setComponentEnabledSetting(
+            new ComponentName(MainActivity.this,DemoCardService.class),
+            enabled?PackageManager.COMPONENT_ENABLED_STATE_ENABLED:PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP);
+        }catch(Exception ignored){}
+        if(web!=null)web.evaluateJavascript("refreshPayment();updateLab();drawDemo();",null);
+      });
+    }
+
     @JavascriptInterface public String diagnostics(){
       JSONObject o=new JSONObject();
       try{
@@ -132,6 +188,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         o.put("nfcOn",adapter!=null&&adapter.isEnabled());
         o.put("hceSupported",getPackageManager().hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION));
         o.put("readerMode",readerMode);
+        o.put("labEnabled",isLabEnabled());
         o.put("lastCardTap",p.getLong("last_tap",0));
         o.put("tapCount",p.getInt("tap_count",0));
         o.put("lastReader",p.getString("last_reader","Noch kein Reader-Test"));
@@ -158,6 +215,7 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
     @JavascriptInterface public void setPresentation(boolean on){
       runOnUiThread(()->{
         if(on){
+          if(readerMode)setReader(false); // Reader mode blocks normal NFC card emulation.
           getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
           getWindow().getDecorView().setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
