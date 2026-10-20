@@ -1,6 +1,13 @@
-# Executive Black v0.5 – NFC-Prototyp
+# Executive Black v0.6 – Offizielle Karten-Einrichtung + NFC-Prototyp
 
 Weiterentwicklung der bestehenden Android-App im privaten BMW-inspirierten Design. Das Originalkartenbild `app/src/main/assets/card-front.jpg` bleibt unverändert. Keine offizielle BMW-, Revolut-, Google- oder Mastercard-App.
+
+## Neue offizielle Karten-Einrichtung
+- **Revolut öffnen**: Die App öffnet die originale Revolut-App. Dort kann die echte Karte über die von Revolut bereitgestellte Schaltfläche „Zu G Pay hinzufügen“ in Google Wallet provisioniert werden.
+- **Google Wallet öffnen**: Dort kann man eine Karte mit Einwilligung der Bank aktivieren; die Rückmeldung wird nicht von Executive Black ausgelesen.
+- **Standard-Wallet einstellen**: Führt zu den Android-NFC-Einstellungen.
+- Keine Eingabe, Speicherung oder Übertragung von Kartennummern, CVCs oder Zahlungstoken durch Executive Black.
+- Das in Executive Black angezeigte Design ersetzt keine echte Bankkarte. Das NFC-Lab bleibt ein vollständig separates Testprotokoll.
 
 ## Was funktioniert
 - Executive Black Kartenansicht inkl. Vollbildmodus und NFC-Hardwarestatus.
@@ -10,7 +17,7 @@ Weiterentwicklung der bestehenden Android-App im privaten BMW-inspirierten Desig
 - Google Wallet weiterhin separat zum echten Bezahlen. Keine Ersetzung der Standard-Wallet erforderlich.
 
 ## Grenzen
-**Kein echtes NFC-Bezahlen über Revolut oder Mastercard.** An einem normalen Kassenterminal wird dieses Testprotokoll nicht als gültiges Zahlungsinstrument akzeptiert. Es werden keine Kartennummern, CVVs, Bank-Zugangsdaten, Token oder Zahlungen verarbeitet. Echte Zahlungen benötigen die autorisierte Issuer-/Scheme-Tokenisierung und eine EMV-Implementierung.
+**Kein eigenständiges NFC-Bezahlen über Revolut oder Mastercard mit Executive Black.** An einem normalen Kassenterminal wird dieses Testprotokoll nicht als gültiges Zahlungsinstrument akzeptiert. Es werden keine Kartennummern, CVVs, Bank-Zugangsdaten, Token oder Zahlungen verarbeitet. Echte Zahlungen benötigen die autorisierte Issuer-/Scheme-Tokenisierung und eine EMV-Implementierung.
 
 ## Testanleitung
 1. APK installieren; NFC aktivieren.
