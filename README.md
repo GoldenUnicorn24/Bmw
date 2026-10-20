@@ -1,22 +1,27 @@
-# Executive Black Wallet v0.5 – NFC-Labormodus
+# Executive Black v0.5 – NFC-Prototyp
 
-Privates, nicht mit BMW, Revolut, Google oder Mastercard verbundenes Designprojekt. Das originale, vom Nutzer bereitgestellte BMW-Kartenbild bleibt in der App unverändert.
+Weiterentwicklung der bestehenden Android-App im privaten BMW-inspirierten Design. Das Originalkartenbild `app/src/main/assets/card-front.jpg` bleibt unverändert. Keine offizielle BMW-, Revolut-, Google- oder Mastercard-App.
 
-## Enthalten
-- Native Android-App mit BMW-Kartenbild, Kartenrotation und Präsentationsmodus
-- NFC-Hardwarestatus und Google-Wallet-Verknüpfung
-- Echte Android Host Card Emulation (HCE), aber ausschließlich für **proprietäres Test-AID `F0112233445566`**
-- Anzeige, ob die App Androids Standard-Wallet ist, und ob ein passender Test-NFC-Reader die Test-AID angesprochen hat
-- Keine Bankkartendaten, kein CVV, kein Mastercard-AID, keine fingierten Zahlungstoken
+## Was funktioniert
+- Executive Black Kartenansicht inkl. Vollbildmodus und NFC-Hardwarestatus.
+- Echte Android Host Card Emulation (HCE) mit **proprietärer Test-AID F00102424D57**, Kategorie **other**.
+- Test-Funkbetrieb zwischen zwei NFC-Handys: ein Gerät als HCE-Karte, ein zweites als NFC-Leser; dazu Statusanzeigen.
+- Lokaler Protokoll-Selbsttest per Knopfdruck.
+- Google Wallet weiterhin separat zum echten Bezahlen. Keine Ersetzung der Standard-Wallet erforderlich.
 
-## Wichtig: keine Zahlungsfähigkeit
-Diese Test-App kann an regulären Kartenterminals keine Revolut- oder Mastercard-Zahlung ausführen. Die Registrierung als NFC-Wallet bei Android ist **keine** Autorisierung durch Kartenissuer oder Zahlungssysteme. Eine echte Kontaktloszahlung erfordert offizielle Issuer-/Scheme-Tokenisierung samt EMV-Verarbeitung. Keinesfalls als Beleg einer akzeptierten Zahlung interpretieren.
+## Grenzen
+**Kein echtes NFC-Bezahlen über Revolut oder Mastercard.** An einem normalen Kassenterminal wird dieses Testprotokoll nicht als gültiges Zahlungsinstrument akzeptiert. Es werden keine Kartennummern, CVVs, Bank-Zugangsdaten, Token oder Zahlungen verarbeitet. Echte Zahlungen benötigen die autorisierte Issuer-/Scheme-Tokenisierung und eine EMV-Implementierung.
 
-### Test der Android-Wallet-Erkennung
-1. APK installieren, NFC einschalten, App öffnen.
-2. „Als Test-Wallet auswählen“ aufrufen. Wenn Android dies erlaubt, bestätigt es nur eine Wallet-Rolle.
-3. Falls du Google Wallet weiterhin zum Bezahlen nutzt, **Google Wallet als Standard belassen**.
-4. Der HCE-Protokolltest erfordert einen passenden NFC-Reader, der `00A4040007F0112233445566` sendet. Erwartete Antwort: `6F0B8407F0112233445566A5009000`. Die App zählt solche Testlesevorgänge.
-5. Sollte Executive Black als Standard gesetzt worden sein, stelle Google Wallet vor echten Einkäufen in den Android-Einstellungen wieder als Standard her.
+## Testanleitung
+1. APK installieren; NFC aktivieren.
+2. In der App „NFC-Protokoll intern testen“ betätigen. Bestätigung bedeutet ausschließlich, dass die APDU-Antwort-Logik funktioniert.
+3. Für den Funk-Test die gleiche APK auf **zwei NFC-Android-Handys** installieren.
+4. Gerät A: Executive App öffnen; „Zweites Handy als NFC-Karte prüfen“ aktiviert Leserbetrieb.
+5. Gerät B: Executive App öffnen (kein Leserbetrieb), Gerät entsperrt lassen.
+6. Beide NFC-Antennen nah zusammenhalten; Gerät A muss „NFC-Test erfolgreich“ melden, Gerät B zählt die Testabfragen.
+7. Leserbetrieb auf Gerät A beenden.
 
-GitHub Actions: Build Android Debug APK → `executive-black-debug-apk`. Noch kein Test auf dem echten Samsung erfolgt.
+Das Test-AID `F00102424D57` antwortet auf SELECT-APDUs mit ASCII `BMW-HCE-DEMO` + `9000`. Keine EMV-Bankkarten-AIDs sind registriert.
+
+## Installation
+GitHub Actions > **Build Android Debug APK** > letzter erfolgreicher Build > Artifact `executive-black-debug-apk` laden, ZIP entpacken und `app-debug.apk` installieren. Die APK ist eine Debug-Testversion und wurde noch nicht auf dem echten Samsung geprüft.
