@@ -14,8 +14,13 @@
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity>
-    <!-- Test category only. Does not register EMV/Mastercard payment AIDs. -->
-    <service android:name=".DemoCardService" android:exported="true"
+    <service android:name=".CardTileService" android:label="Executive Card"
+        android:icon="@drawable/ic_executive" android:exported="true"
+        android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+      <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
+    </service>
+    <!-- Demo NFC service OFF by default; never registers payment AIDs. -->
+    <service android:name=".DemoCardService" android:enabled="false" android:exported="true"
         android:permission="android.permission.BIND_NFC_SERVICE">
       <intent-filter>
         <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE"/>
