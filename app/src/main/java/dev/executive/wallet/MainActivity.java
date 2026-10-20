@@ -3,6 +3,8 @@ package dev.executive.wallet;
 import android.app.Activity;
 import android.app.role.RoleManager;
 import android.os.Build;
+import android.service.quickaccesswallet.QuickAccessWalletService;
+import android.widget.Toast;
 import android.content.ComponentName;
 import android.os.Bundle;
 import android.graphics.Color;
@@ -237,16 +239,43 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         }catch(Exception ignored){}
       });
     }
+    /** Official Google Wallet entry point, where supported by its installed version. */
+    private Intent officialWalletIntent(){
+      String pkg="com.google.android.apps.walletnfcrel";
+      Intent quick=new Intent(QuickAccessWalletService.ACTION_VIEW_WALLET).setPackage(pkg);
+      if(quick.resolveActivity(getPackageManager())!=null)return quick;
+      return getPackageManager().getLaunchIntentForPackage(pkg);
+    }
+
+    /** Normal launch remains independent of our application. */
     @JavascriptInterface public void openWallet(){
       runOnUiThread(()->{
-        String pkg="com.google.android.apps.walletnfcrel";
-        Intent i=getPackageManager().getLaunchIntentForPackage(pkg);
+        Intent i=officialWalletIntent();
         try{
           if(i!=null)startActivity(i);
-          else startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("market://details?id="+pkg)));
-        }catch(Exception ignored){}
+          else startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("market://details?id=com.google.android.apps.walletnfcrel")));
+        }catch(Exception e){Toast.makeText(MainActivity.this,"Google Wallet konnte nicht geöffnet werden.",Toast.LENGTH_LONG).show();}
       });
     }
+
+    /** Best-effort system-supported split-screen attempt. No protected app embedding. */
+    @JavascriptInterface public void openWalletAdjacent(){
+      runOnUiThread(()->{
+        Intent i=officialWalletIntent();
+        if(i==null){Toast.makeText(MainActivity.this,"Installiere zuerst Google Wallet.",Toast.LENGTH_LONG).show();return;}
+        // Exit Android immersive mode for the system to arrange two windows.
+        getWindow().getDecorView().setSystemUiVisibility(0);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        try {
+          i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+          startActivity(i);
+          Toast.makeText(MainActivity.this,"Fenstermodus angefragt. Das System kann Google Wallet trotzdem im Vollbild öffnen.",Toast.LENGTH_LONG).show();
+        }catch(Exception e){
+          Toast.makeText(MainActivity.this,"Fenstermodus nicht verfügbar: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();
+        }
+      });
+    }
+
 
     @JavascriptInterface public void openPaymentSettings(){
       runOnUiThread(()->{
