@@ -169,6 +169,17 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
       });
     }
 
+    /** Open the official Revolut app; card provisioning stays inside the issuer app. */
+    @JavascriptInterface public void openRevolut(){
+      runOnUiThread(()->{
+        String pkg="com.revolut.revolut";
+        Intent installed=getPackageManager().getLaunchIntentForPackage(pkg);
+        try{
+          if(installed!=null) startActivity(installed);
+          else startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://play.google.com/store/apps/details?id="+pkg)));
+        }catch(Exception ignored){}
+      });
+    }
     @JavascriptInterface public void openWallet(){
       runOnUiThread(()->{
         String pkg="com.google.android.apps.walletnfcrel";
