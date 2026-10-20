@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-<uses-permission android:name="android.permission.NFC"/><uses-feature android:name="android.hardware.nfc" android:required="false"/>
+<uses-permission android:name="android.permission.NFC"/><uses-feature android:name="android.hardware.nfc.hce" android:required="false"/><uses-feature android:name="android.hardware.nfc" android:required="false"/>
 <queries><package android:name="com.google.android.apps.walletnfcrel"/></queries>
 <application android:label="Executive Black" android:icon="@drawable/ic_executive" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false" android:usesCleartextTraffic="false">
-<activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application>
+<activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+<service android:name=".DemoApduService" android:exported="true" android:permission="android.permission.BIND_NFC_SERVICE"><intent-filter><action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE"/></intent-filter><meta-data android:name="android.nfc.cardemulation.host_apdu_service" android:resource="@xml/demo_apdu_service"/></service>
+</application>
 </manifest>
