@@ -1,34 +1,22 @@
-# Executive Black v0.6 – Offizielle Karten-Einrichtung + NFC-Prototyp
+# Executive Black v0.7 – Tap Companion (Samsung / Google Wallet)
 
-Weiterentwicklung der bestehenden Android-App im privaten BMW-inspirierten Design. Das Originalkartenbild `app/src/main/assets/card-front.jpg` bleibt unverändert. Keine offizielle BMW-, Revolut-, Google- oder Mastercard-App.
+Standalone BMW-inspired card presentation with a **genuine Android wallet-role check** (Android 15+, API 35), instant full-screen card on launch, and an optional Samsung Quick Settings tile **Executive Card**. Existing artwork `app/src/main/assets/card-front.jpg` unchanged.
 
-## Neue offizielle Karten-Einrichtung
-- **Revolut öffnen**: Die App öffnet die originale Revolut-App. Dort kann die echte Karte über die von Revolut bereitgestellte Schaltfläche „Zu G Pay hinzufügen“ in Google Wallet provisioniert werden.
-- **Google Wallet öffnen**: Dort kann man eine Karte mit Einwilligung der Bank aktivieren; die Rückmeldung wird nicht von Executive Black ausgelesen.
-- **Standard-Wallet einstellen**: Führt zu den Android-NFC-Einstellungen.
-- Keine Eingabe, Speicherung oder Übertragung von Kartennummern, CVCs oder Zahlungstoken durch Executive Black.
-- Das in Executive Black angezeigte Design ersetzt keine echte Bankkarte. Das NFC-Lab bleibt ein vollständig separates Testprotokoll.
+**Important:** Executive Black is a presentation/companion app; **not** a payment wallet. Contactless payment remains fully handled by Google Wallet and the issuer. Android/Google may overlay payment authentication or card UI, and this app cannot suppress it. It does not receive the Mastercard token, verify a successful transaction, or call a Google payment SDK.
 
-## Was funktioniert
-- Executive Black Kartenansicht inkl. Vollbildmodus und NFC-Hardwarestatus.
-- Echte Android Host Card Emulation (HCE) mit **proprietärer Test-AID F00102424D57**, Kategorie **other**.
-- Test-Funkbetrieb zwischen zwei NFC-Handys: ein Gerät als HCE-Karte, ein zweites als NFC-Leser; dazu Statusanzeigen.
-- Lokaler Protokoll-Selbsttest per Knopfdruck.
-- Google Wallet weiterhin separat zum echten Bezahlen. Keine Ersetzung der Standard-Wallet erforderlich.
+## What's new
+- Opening the app immediately displays the Executive Black full-screen card. Close to access settings and NFC diagnostics.
+- Integrated local check of the Android 15+ default wallet role: whether Google Wallet is selected, another holder, none or unknown.
+- Does NOT automatically launch Google Wallet from the presentation view: Android's **default wallet** continues handling real payments via the OS.
+- Optional **Executive Card** Quick Settings tile: edit the notification shade's Quick Settings tiles, add the tile, then tap to launch the card. Device must be unlocked when required.
+- Demo HCE component is disabled by default to avoid accidental NFC-test mode during real payment. In NFC LAB, manually enable only for two-device testing, then disable again. The proprietary `F00102424D57` demo AID never imitates Mastercard.
+- NFC Reader mode is stopped when presentation mode opens to avoid blocking phone card emulation.
 
-## Grenzen
-**Kein eigenständiges NFC-Bezahlen über Revolut oder Mastercard mit Executive Black.** An einem normalen Kassenterminal wird dieses Testprotokoll nicht als gültiges Zahlungsinstrument akzeptiert. Es werden keine Kartennummern, CVVs, Bank-Zugangsdaten, Token oder Zahlungen verarbeitet. Echte Zahlungen benötigen die autorisierte Issuer-/Scheme-Tokenisierung und eine EMV-Implementierung.
+## Test
+1. Install this APK on an unlocked Android NFC phone; existing Google Wallet + Revolut card should remain installed and set as the default wallet.
+2. Open Executive Black: card appears full screen automatically. Close this view to inspect the standard wallet diagnosis.
+3. Optionally add **Executive Card** in the Samsung Quick Settings customization menu.
+4. At a payment terminal the **real payment is via Google Wallet**; system UI may cover BMW Executive and normal authentication may be required. **Only Google Wallet or Revolut can confirm whether a payment succeeded.**
+5. Use NFC LAB only with a second NFC-enabled phone, never as a payment test.
 
-## Testanleitung
-1. APK installieren; NFC aktivieren.
-2. In der App „NFC-Protokoll intern testen“ betätigen. Bestätigung bedeutet ausschließlich, dass die APDU-Antwort-Logik funktioniert.
-3. Für den Funk-Test die gleiche APK auf **zwei NFC-Android-Handys** installieren.
-4. Gerät A: Executive App öffnen; „Zweites Handy als NFC-Karte prüfen“ aktiviert Leserbetrieb.
-5. Gerät B: Executive App öffnen (kein Leserbetrieb), Gerät entsperrt lassen.
-6. Beide NFC-Antennen nah zusammenhalten; Gerät A muss „NFC-Test erfolgreich“ melden, Gerät B zählt die Testabfragen.
-7. Leserbetrieb auf Gerät A beenden.
-
-Das Test-AID `F00102424D57` antwortet auf SELECT-APDUs mit ASCII `BMW-HCE-DEMO` + `9000`. Keine EMV-Bankkarten-AIDs sind registriert.
-
-## Installation
-GitHub Actions > **Build Android Debug APK** > letzter erfolgreicher Build > Artifact `executive-black-debug-apk` laden, ZIP entpacken und `app-debug.apk` installieren. Die APK ist eine Debug-Testversion und wurde noch nicht auf dem echten Samsung geprüft.
+Never store card number, CVV, bank login, or payment tokens in this public repository or app. Independent wallet integration requires issuer and payment-network approval.
