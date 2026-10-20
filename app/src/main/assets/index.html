@@ -20,32 +20,45 @@
  <p>Test mit zwei Geräten: Auf Handy A diese App öffnen, NFC aktivieren und Bildschirm entsperren. Auf Handy B dieselbe App installieren, „Testkarte lesen“ drücken und die Rückseiten annähern. Wenn BMW-HCE-DEMO erkannt wird, funktioniert die Testübertragung. **Nicht** an einer Ladenkasse verwenden.</p>
  <p>Deine echte Revolut-Mastercard bleibt ausschließlich in der offiziellen Google Wallet gespeichert. Für eine eigenständige Zahlung fehlen Bankfreigabe und sichere Zahlungstoken.</p>
 </section><button class="primary" onclick="stage(true)"><span>EXECUTIVE MODUS<small>Karte groß anzeigen beim Bezahlen</small></span><span>↗</span></button><div class="actions"><button onclick="wallet()">GOOGLE WALLET ↗</button><button onclick="settings()">NFC-EINSTELLUNGEN ⚙</button></div><section class="nfc-demo" aria-label="NFC-Labormodus">
-<div class="eyebrow">EXPERIMENTAL · NFC LAB</div>
-<h3>Executive Test Wallet</h3>
-<p class="hard-warning"><strong>TESTMODUS – KEINE ECHTEN ZAHLUNGEN.</strong> Die App emuliert nur einen eigenen NFC-Testdienst. Ohne Revolut-/Mastercard-Zahlungstoken wird eine Supermarktkasse keine Zahlung akzeptieren.</p>
-<p id="demoState">NFC-Teststatus wird geprüft …</p>
-<button onclick="activateDemo()">ALS TEST-WALLET AUSWÄHLEN ↗</button>
-<p class="micro">Achtung: Wenn du Executive Black als Standard-Wallet auswählst, funktioniert das kontaktlose Bezahlen mit Google Wallet möglicherweise nicht mehr, bis du Google Wallet wieder als Standard einstellst.</p>
-<p class="micro" id="demoLast">Noch kein NFC-Testleser erkannt. Test-AID: F0112233445566</p>
+<div class="eyebrow">EXPERIMENTAL · NFC LAB</div><h3>Executive NFC Test</h3>
+<p class="hard-warning"><strong>KEINE ECHTE ZAHLUNG.</strong> Diese Version emuliert ein eigenes NFC-Testsignal, keine Revolut- oder Mastercard-Zahlung. Das BMW-Kartenbild bleibt unverändert.</p>
+<p id="demoState">NFC-Diagnose wird geladen …</p>
+<button onclick="selfTest()">NFC-PROTOKOLL INTERN TESTEN ✓</button>
+<button onclick="readerTest()">ZWEITES HANDY ALS NFC-KARTE PRÜFEN ↗</button>
+<button onclick="readerStop()">LESERMODUS BEENDEN ×</button>
+<p class="micro" id="demoLast">Noch keine Testkarte erkannt.</p>
+<p class="micro">Für einen echten Funk-Test brauchst du zwei Android-Geräte mit NFC. Auf dem ersten Gerät startest du den Lesermodus, auf dem zweiten bleibt die Executive-App geöffnet. Google Wallet bleibt Standard für echte Kartenzahlungen.</p>
 </section><div class="rows"><div><span>CARD HOLDER</span><strong>LEON STARK</strong></div><div><span>DESIGN</span><strong>EXECUTIVE BLACK / 01</strong></div><div><span>PAYMENT</span><strong>ANDROID DEFAULT WALLET</strong></div></div><footer>INDEPENDENT PERSONAL CONCEPT · NOT AFFILIATED WITH OR ENDORSED BY BMW, GOOGLE OR REVOLUT. THIS APP DOES NOT STORE PAYMENT CREDENTIALS OR PROCESS PAYMENTS. ANDROID MAY DISPLAY SYSTEM PAYMENT OR SECURITY OVERLAYS.</footer></main><section class="stage" id="stage"><div class="stage-top"><b>EXECUTIVE BLACK</b><button onclick="stage(false)">SCHLIESSEN ×</button></div><div class="stage-label">THE PERSONAL COLLECTION</div><h2>Designed to<br><strong>stand apart.</strong></h2><div style="width:100%;max-width:570px" id="stageMount"></div><div class="stage-info"><i id="sdot" class="dot"></i><span id="stageNfc">NFC prüfen</span></div><p class="stage-note">Entsperrtes Gerät ans Terminal halten. Google Wallet als Standard-Zahlungsapp kann im Hintergrund bezahlen. Die Android-Systemanzeige lässt sich nicht unterdrücken.</p><div class="stage-end">BLACK SERIES · PRIVATE DESIGN · 2026</div></section><script>
 let flipped=false;function flip(){flipped=!flipped;document.getElementById('walletCard').classList.toggle('flipped',flipped)}
 function wallet(){if(window.NativeWallet)NativeWallet.openWallet();else alert('Wallet nur in der Android-App')}
 function settings(){if(window.NativeWallet)NativeWallet.openPaymentSettings();else alert('NFC-Einstellungen nur in der Android-App')}
 function stage(on){let e=document.getElementById('stage'),m=document.getElementById('stageMount');e.classList.toggle('active',on);if(on){m.innerHTML='';let clone=document.getElementById('walletCard').cloneNode(true);clone.classList.remove('flipped');clone.removeAttribute('id');m.appendChild(clone)}if(window.NativeWallet)NativeWallet.setPresentation(on);status()}
 
-function activateDemo(){
- if(!window.NativeWallet){alert('Nur in der installierten Android-App möglich.');return}
- if(confirm('Nur NFC-Testbetrieb! Mit Executive Black als Standard-Wallet funktionieren echte Revolut-Zahlungen NICHT. Wenn du normal bezahlen möchtest, lasse Google Wallet als Standard eingestellt. Test-Wallet trotzdem auswählen?'))NativeWallet.selectDemoWallet()
+
+function selfTest(){
+ if(!window.NativeWallet){alert('Bitte die Android-App installieren.');return}
+ try{alert(NativeWallet.logicSelfTest()?'NFC-Protokolltest erfolgreich. Nur Softwaretest, keine echte Bezahlung.':'NFC-Protokolltest fehlgeschlagen.')}catch(e){alert('Test noch nicht verfügbar.')}
+ drawDemo();
+}
+function readerTest(){
+ if(!window.NativeWallet){alert('Der Lesermodus benötigt die Android-App.');return}
+ NativeWallet.setReaderMode(true);
+ setTimeout(drawDemo,250); 
+}
+function readerStop(){
+ if(window.NativeWallet)NativeWallet.setReaderMode(false);
+ setTimeout(drawDemo,250);
 }
 function drawDemo(){
- let statusEl=document.getElementById('demoState'), lastEl=document.getElementById('demoLast');
- if(!statusEl||!lastEl)return;
- if(!window.NativeWallet){statusEl.textContent='Android-NFC-Status erst in der APK verfügbar.';return}
+ const s=document.getElementById('demoState'), last=document.getElementById('demoLast');
+ if(!s||!last)return;
+ if(!window.NativeWallet){s.textContent='NFC-Test erst in der Android-App möglich.';return}
  try{
-  let state=JSON.parse(NativeWallet.state());
-  statusEl.textContent=state.hceSupported?(state.isDemoDefaultWallet?'Android-Testwallet ist als Standard ausgewählt.':'NFC-HCE ist verfügbar. Die Testwallet kann in Android ausgewählt werden.'):'NFC-HCE wird von diesem Gerät nicht unterstützt.';
-  lastEl.textContent=state.testTapCount>0?('Testleser erkannt: '+state.testTapCount+'× · zuletzt '+new Date(state.lastTestTap).toLocaleString('de-DE')):'Noch kein passender NFC-Testleser erkannt. Test-AID: F0112233445566';
- }catch(e){statusEl.textContent='Teststatus kann nicht ausgelesen werden.';}
+  const x=JSON.parse(NativeWallet.diagnostics());
+  s.textContent=!x.hceSupported?'Dieses Gerät unterstützt keine NFC-Kartenemulation.':!x.nfcOn?'NFC ist ausgeschaltet. Bitte aktivieren.':x.readerMode?'NFC-Lesermodus läuft · Gerät an ein zweites NFC-Handy halten.':'NFC-HCE verfügbar · Testkarte ist vorbereitet.';
+  let d=x.tapCount>0?('Dieses Gerät wurde '+x.tapCount+'× als Testkarte erkannt. '):'Dieses Gerät wurde noch nicht als Testkarte erkannt. ';
+  last.textContent=d+'Letzter Lesertest: '+(x.lastReader||'Keiner')+'.';
+ }catch(e){s.textContent='NFC-Diagnose konnte nicht gelesen werden.';}
 }
 setInterval(drawDemo,2500);
 function status(){let n=document.getElementById('nfc'),h=document.getElementById('hint'),d=document.getElementById('dot'),sd=document.getElementById('sdot'),sn=document.getElementById('stageNfc');let x={};try{if(window.NativeWallet)x=JSON.parse(NativeWallet.state())}catch(e){}if(!window.NativeWallet){n.textContent='VORSCHAU';sn.textContent='NFC-Status nur in der App';return}if(!x.supported){n.textContent='NICHT VERFÜGBAR';sn.textContent='NFC nicht verfügbar';h.textContent='Dein Gerät meldet keine NFC-Hardware.'}else if(!x.enabled){n.textContent='DEAKTIVIERT';sn.textContent='NFC deaktiviert';h.textContent='Aktiviere NFC und richte Google Wallet als Standard ein.'}else{n.textContent='AKTIV';sn.textContent='NFC aktiviert · Wallet separat einrichten';d.classList.add('ok');sd.classList.add('ok');h.textContent='NFC-Hardware aktiv. Diese App kann nicht prüfen, ob Revolut zahlungsbereit ist.'}}status();
