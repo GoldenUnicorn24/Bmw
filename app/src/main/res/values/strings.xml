@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="demo_service_description">Executive Black NFC-Testkarte – keine Zahlung</string>
-  <string name="demo_group_description">Private NFC-Diagnose, keine Mastercard</string>
+  <string name="demo_hce_description">Executive Black – NFC-Testwallet (keine echte Zahlung)</string>
+  <string name="demo_aid_description">Executive Black Testprotokoll ohne Bankdaten</string>
 </resources>
