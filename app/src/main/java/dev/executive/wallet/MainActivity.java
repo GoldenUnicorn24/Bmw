@@ -152,17 +152,16 @@ public class MainActivity extends Activity implements NfcAdapter.ReaderCallback 
         o.put("labEnabled",isLabEnabled());
         o.put("secureLock",((KeyguardManager)getSystemService(Context.KEYGUARD_SERVICE)).isDeviceSecure());
         o.put("googleInstalled",getPackageManager().getLaunchIntentForPackage("com.google.android.apps.walletnfcrel")!=null);
-        String choice="unknown";
+        // Android exposes only whether *our own app* holds the Wallet role.
+        // It does not provide a public API to identify another app's holder.
+        boolean bmwHasWalletRole=false;
         if(Build.VERSION.SDK_INT>=35){
           RoleManager role=(RoleManager)getSystemService(Context.ROLE_SERVICE);
-          if(role!=null && role.isRoleAvailable(RoleManager.ROLE_WALLET)){
-            java.util.List<String> holders=role.getRoleHolders(RoleManager.ROLE_WALLET);
-            if(holders.contains("com.google.android.apps.walletnfcrel"))choice="google";
-            else if(!holders.isEmpty())choice="other";
-            else choice="none";
-          }
+          if(role!=null && role.isRoleAvailable(RoleManager.ROLE_WALLET))
+            bmwHasWalletRole=role.isRoleHeld(RoleManager.ROLE_WALLET);
         }
-        o.put("walletDefault",choice);
+        o.put("bmwIsWalletDefault",bmwHasWalletRole);
+        o.put("walletDefault","unknown");
       }catch(Exception ignored){}
       return o.toString();
     }
