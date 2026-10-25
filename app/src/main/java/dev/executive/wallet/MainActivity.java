@@ -1,296 +1,176 @@
 package dev.executive.wallet;
 
 import android.app.Activity;
-import android.app.role.RoleManager;
-import android.os.Build;
-import android.service.quickaccesswallet.QuickAccessWalletService;
-import android.widget.Toast;
-import android.content.ComponentName;
-import android.os.Bundle;
-import android.graphics.Color;
-import android.nfc.NfcAdapter;
-import android.nfc.Tag;
-import android.nfc.tech.IsoDep;
 import android.app.KeyguardManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
+import android.nfc.NfcAdapter;
+import android.nfc.cardemulation.CardEmulation;
+import android.os.Bundle;
 import android.provider.Settings;
-import android.view.WindowManager;
+import android.service.quickaccesswallet.QuickAccessWalletService;
 import android.view.View;
+import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.JavascriptInterface;
+import android.widget.Toast;
 import org.json.JSONObject;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 
 /**
- * Executive Black, user-interface and proprietary NFC LAB.
- * Genuine payments are exclusively handled by the system's default wallet.
+ * Executive Black – shows the BMW card full screen while the phone's default
+ * payment wallet (Google Wallet with the user's bank card) pays in the background.
+ * This app never stores card data, never emulates a card and never sees a payment.
  */
-public class MainActivity extends Activity implements NfcAdapter.ReaderCallback {
+public class MainActivity extends Activity {
+  static final String GOOGLE_WALLET = "com.google.android.apps.walletnfcrel";
+  static final String REVOLUT = "com.revolut.revolut";
+  /** Known HCE payment components of Google Wallet (best effort, varies by version). */
+  static final String[] GOOGLE_HCE = {
+    "com.google.android.gms/com.google.android.gms.tapandpay.hce.service.TpHceService",
+    "com.google.android.apps.walletnfcrel/com.google.android.gms.tapandpay.hce.service.TpHceService"
+  };
+
   WebView web;
-  NfcAdapter adapter;
-  volatile boolean readerMode = false;
 
   @Override public void onCreate(Bundle b) {
     super.onCreate(b);
     getWindow().setStatusBarColor(Color.rgb(5,6,8));
     getWindow().setNavigationBarColor(Color.rgb(5,6,8));
-    adapter=NfcAdapter.getDefaultAdapter(this);
-    web=new WebView(this);
-    WebSettings s=web.getSettings();
-    s.setJavaScriptEnabled(true);s.setAllowFileAccess(true);s.setAllowContentAccess(false);
-    s.setAllowUniversalAccessFromFileURLs(false);
+    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    web = new WebView(this);
+    web.setBackgroundColor(Color.rgb(5,6,8));
+    WebSettings s = web.getSettings();
+    s.setJavaScriptEnabled(true);
+    s.setDomStorageEnabled(true);
+    s.setAllowFileAccess(true);
+    s.setAllowContentAccess(false);
     s.setAllowFileAccessFromFileURLs(false);
-    web.setWebViewClient(new WebViewClient(){
-      @Override public void onPageFinished(WebView v,String url) {
-        if (url!=null && url.startsWith("file:///android_asset/"))
-          v.evaluateJavascript("stage(true);refreshPayment();", null);
-      }
-      @Override public boolean shouldOverrideUrlLoading(WebView v, android.webkit.WebResourceRequest r){
+    s.setAllowUniversalAccessFromFileURLs(false);
+    web.setWebViewClient(new WebViewClient() {
+      @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
         return !r.getUrl().toString().startsWith("file:///android_asset/");
       }
     });
-    web.setWebChromeClient(new WebChromeClient());
-    web.addJavascriptInterface(new Bridge(),"NativeWallet");
+    web.addJavascriptInterface(new Bridge(), "Executive");
     setContentView(web);
     web.loadUrl("file:///android_asset/index.html");
   }
 
-  @Override protected void onResume(){
+  @Override protected void onResume() {
     super.onResume();
-    if(web!=null) web.post(()->web.evaluateJavascript("status();if(window.updateLab)updateLab();if(window.refreshPayment)refreshPayment();",null));
+    immersive();
+    if (web != null) web.post(() -> web.evaluateJavascript("window.refresh&&refresh()", null));
   }
 
-  @Override protected void onNewIntent(Intent intent){
-    super.onNewIntent(intent);
-    setIntent(intent);
-    if(web!=null)web.post(()->web.evaluateJavascript("stage(true);refreshPayment();",null));
+  @Override public void onWindowFocusChanged(boolean focus) {
+    super.onWindowFocusChanged(focus);
+    if (focus) immersive();
   }
 
-  @Override protected void onPause(){
-    if(readerMode && adapter!=null) {
-      try{adapter.disableReaderMode(this);}catch(Exception ignored){}
-      readerMode=false;
-    }
-    super.onPause();
+  private void immersive() {
+    if (isInMultiWindowMode()) { getWindow().getDecorView().setSystemUiVisibility(0); return; }
+    getWindow().getDecorView().setSystemUiVisibility(
+      View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+      | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+      | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
   }
 
-  private void setReader(boolean on) {
-    if(adapter==null || !adapter.isEnabled()){readerMode=false;return;}
-    try{
-      if(on){
-        adapter.enableReaderMode(this,this,
-            NfcAdapter.FLAG_READER_NFC_A|NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,null);
-        readerMode=true;
-      }else {
-        adapter.disableReaderMode(this);
-        readerMode=false;
+  private boolean installed(String pkg) {
+    try { getPackageManager().getPackageInfo(pkg, 0); return true; }
+    catch (PackageManager.NameNotFoundException e) { return false; }
+  }
+
+  /** "yes" = Google Wallet confirmed as default, "no" = something else is, "unknown" = not readable. */
+  private String googleDefault(NfcAdapter a) {
+    if (a == null) return "unknown";
+    try {
+      CardEmulation ce = CardEmulation.getInstance(a);
+      for (String c : GOOGLE_HCE) {
+        ComponentName cn = ComponentName.unflattenFromString(c);
+        if (cn != null && ce.isDefaultServiceForCategory(cn, CardEmulation.CATEGORY_PAYMENT)) return "yes";
       }
-    }catch(Exception e){
-      readerMode=false;
-      getSharedPreferences("demo_hce",MODE_PRIVATE).edit()
-          .putString("last_reader","Reader konnte nicht gestartet werden: "+e.getClass().getSimpleName()).apply();
-    }
+    } catch (Exception ignored) { }
+    return "unknown";
   }
 
-  @Override public void onTagDiscovered(Tag tag) {
-    String message;
-    IsoDep iso = IsoDep.get(tag);
-    if(iso==null) message="Kein ISO-DEP-Gerät erkannt. Zweites Android-Handy erforderlich.";
-    else {
-      try {
-        iso.connect();iso.setTimeout(4000);
-        byte[] aid=DemoCardService.AID;
-        byte[] apdu=new byte[6+aid.length];
-        apdu[0]=0; apdu[1]=(byte)0xA4; apdu[2]=0x04; apdu[3]=0; apdu[4]=(byte)aid.length;
-        System.arraycopy(aid,0,apdu,5,aid.length);
-        apdu[apdu.length-1]=0;
-        byte[] response=iso.transceive(apdu);
-        byte[] prefix="BMW-HCE-DEMO".getBytes(StandardCharsets.US_ASCII);
-        boolean ok=response.length==prefix.length+2
-          && Arrays.equals(Arrays.copyOf(response,prefix.length),prefix)
-          && response[response.length-2]==(byte)0x90
-          && response[response.length-1]==0;
-        message=ok?"NFC-Test erfolgreich: zweites Smartphone antwortet. KEINE Bezahlung."
-                 :"Keine BMW-Testkarte erkannt (anderer NFC-Tag oder keine Test-App).";
-      }catch(Exception e){message="NFC-Test fehlgeschlagen: "+e.getClass().getSimpleName();}
-      finally{try{iso.close();}catch(Exception ignored){}}
+  private void start(Intent i, String fallbackPkg) {
+    try { startActivity(i); }
+    catch (Exception e) {
+      if (fallbackPkg != null) {
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + fallbackPkg))); return; }
+        catch (Exception ignored) { }
+      }
+      Toast.makeText(this, "Konnte nicht geöffnet werden.", Toast.LENGTH_LONG).show();
     }
-    getSharedPreferences("demo_hce",MODE_PRIVATE).edit()
-      .putString("last_reader",message)
-      .putLong("last_reader_time",System.currentTimeMillis()).apply();
-  }
-
-  private boolean isLabEnabled(){
-    PackageManager pm=getPackageManager();
-    int mode=pm.getComponentEnabledSetting(new ComponentName(this,DemoCardService.class));
-    // The demo component is disabled by default in the manifest.
-    return mode==PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
   }
 
   class Bridge {
-    @JavascriptInterface public String state(){
-      JSONObject o=new JSONObject();
-      try{
-        NfcAdapter a=NfcAdapter.getDefaultAdapter(MainActivity.this);
-        o.put("supported",a!=null);o.put("enabled",a!=null&&a.isEnabled());
-        KeyguardManager km=(KeyguardManager)getSystemService(Context.KEYGUARD_SERVICE);
-        o.put("secure",km!=null&&km.isDeviceSecure());
-      }catch(Exception ignored){}
-      return o.toString();
-    }
-
-    /** The phone's actual payment wallet remains independent of this display app. */
-    @JavascriptInterface public String paymentState(){
-      JSONObject o=new JSONObject();
+    @JavascriptInterface public String state() {
+      JSONObject o = new JSONObject();
       try {
-        o.put("nfcOn",adapter!=null && adapter.isEnabled());
-        o.put("labEnabled",isLabEnabled());
-        o.put("secureLock",((KeyguardManager)getSystemService(Context.KEYGUARD_SERVICE)).isDeviceSecure());
-        o.put("googleInstalled",getPackageManager().getLaunchIntentForPackage("com.google.android.apps.walletnfcrel")!=null);
-        // Android exposes only whether *our own app* holds the Wallet role.
-        // It does not provide a public API to identify another app's holder.
-        boolean bmwHasWalletRole=false;
-        if(Build.VERSION.SDK_INT>=35){
-          RoleManager role=(RoleManager)getSystemService(Context.ROLE_SERVICE);
-          if(role!=null && role.isRoleAvailable(RoleManager.ROLE_WALLET))
-            bmwHasWalletRole=role.isRoleHeld(RoleManager.ROLE_WALLET);
-        }
-        o.put("bmwIsWalletDefault",bmwHasWalletRole);
-        o.put("walletDefault","unknown");
-      }catch(Exception ignored){}
+        NfcAdapter a = NfcAdapter.getDefaultAdapter(MainActivity.this);
+        KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        o.put("nfcSupported", a != null);
+        o.put("nfcOn", a != null && a.isEnabled());
+        o.put("hce", getPackageManager().hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION));
+        o.put("secure", km != null && km.isDeviceSecure());
+        o.put("wallet", installed(GOOGLE_WALLET));
+        o.put("revolut", installed(REVOLUT));
+        o.put("walletDefault", googleDefault(a));
+        o.put("version", getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
+      } catch (Exception ignored) { }
       return o.toString();
     }
 
-    @JavascriptInterface public void setLabEnabled(boolean enabled){
-      runOnUiThread(()->{
-        if(readerMode)setReader(false);
-        try{
-          getPackageManager().setComponentEnabledSetting(
-            new ComponentName(MainActivity.this,DemoCardService.class),
-            enabled?PackageManager.COMPONENT_ENABLED_STATE_ENABLED:PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP);
-        }catch(Exception ignored){}
-        if(web!=null)web.evaluateJavascript("refreshPayment();updateLab();drawDemo();",null);
+    @JavascriptInterface public void openWallet() {
+      runOnUiThread(() -> {
+        Intent i = new Intent(QuickAccessWalletService.ACTION_VIEW_WALLET).setPackage(GOOGLE_WALLET);
+        if (i.resolveActivity(getPackageManager()) == null) i = getPackageManager().getLaunchIntentForPackage(GOOGLE_WALLET);
+        if (i == null) i = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + GOOGLE_WALLET));
+        start(i, GOOGLE_WALLET);
       });
     }
 
-    @JavascriptInterface public String diagnostics(){
-      JSONObject o=new JSONObject();
-      try{
-        android.content.SharedPreferences p=getSharedPreferences("demo_hce",MODE_PRIVATE);
-        o.put("supported",adapter!=null);
-        o.put("nfcOn",adapter!=null&&adapter.isEnabled());
-        o.put("hceSupported",getPackageManager().hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION));
-        o.put("readerMode",readerMode);
-        o.put("labEnabled",isLabEnabled());
-        o.put("lastCardTap",p.getLong("last_tap",0));
-        o.put("tapCount",p.getInt("tap_count",0));
-        o.put("lastReader",p.getString("last_reader","Noch kein Reader-Test"));
-        o.put("lastReaderTime",p.getLong("last_reader_time",0));
-        o.put("testAid",DemoCardService.AID_HEX);
-      }catch(Exception ignored){}
-      return o.toString();
-    }
-
-    @JavascriptInterface public boolean logicSelfTest(){
-      byte[] aid=DemoCardService.AID;
-      byte[] apdu=new byte[6+aid.length];
-      apdu[0]=0;apdu[1]=(byte)0xA4;apdu[2]=4;apdu[3]=0;apdu[4]=(byte)aid.length;
-      System.arraycopy(aid,0,apdu,5,aid.length);
-      byte[] reply=DemoCardService.respond(apdu);
-      return new String(reply,0,reply.length-2,StandardCharsets.US_ASCII).equals("BMW-HCE-DEMO")
-        && reply[reply.length-2]==(byte)0x90 && reply[reply.length-1]==0;
-    }
-
-    @JavascriptInterface public void setReaderMode(boolean enabled){
-      runOnUiThread(()->setReader(enabled));
-    }
-
-    @JavascriptInterface public void setPresentation(boolean on){
-      runOnUiThread(()->{
-        if(on){
-          if(readerMode)setReader(false); // Reader mode blocks normal NFC card emulation.
-          getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-          getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-              |View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-        }else {
-          getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-          getWindow().getDecorView().setSystemUiVisibility(0);
-        }
+    @JavascriptInterface public void openRevolut() {
+      runOnUiThread(() -> {
+        Intent i = getPackageManager().getLaunchIntentForPackage(REVOLUT);
+        if (i == null) i = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + REVOLUT));
+        start(i, REVOLUT);
       });
     }
 
-    /** Open the official Revolut app; card provisioning stays inside the issuer app. */
-    @JavascriptInterface public void openRevolut(){
-      runOnUiThread(()->{
-        String pkg="com.revolut.revolut";
-        Intent installed=getPackageManager().getLaunchIntentForPackage(pkg);
-        try{
-          if(installed!=null) startActivity(installed);
-          else startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://play.google.com/store/apps/details?id="+pkg)));
-        }catch(Exception ignored){}
-      });
-    }
-    /** Official Google Wallet entry point, where supported by its installed version. */
-    private Intent officialWalletIntent(){
-      String pkg="com.google.android.apps.walletnfcrel";
-      Intent quick=new Intent(QuickAccessWalletService.ACTION_VIEW_WALLET).setPackage(pkg);
-      if(quick.resolveActivity(getPackageManager())!=null)return quick;
-      return getPackageManager().getLaunchIntentForPackage(pkg);
+    @JavascriptInterface public void openNfcSettings() {
+      runOnUiThread(() -> start(new Intent(Settings.ACTION_NFC_SETTINGS), null));
     }
 
-    /** Normal launch remains independent of our application. */
-    @JavascriptInterface public void openWallet(){
-      runOnUiThread(()->{
-        Intent i=officialWalletIntent();
-        try{
-          if(i!=null)startActivity(i);
-          else startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("market://details?id=com.google.android.apps.walletnfcrel")));
-        }catch(Exception e){Toast.makeText(MainActivity.this,"Google Wallet konnte nicht geöffnet werden.",Toast.LENGTH_LONG).show();}
+    @JavascriptInterface public void openPaymentSettings() {
+      runOnUiThread(() -> {
+        try { startActivity(new Intent(Settings.ACTION_NFC_PAYMENT_SETTINGS)); }
+        catch (Exception e) { start(new Intent(Settings.ACTION_NFC_SETTINGS), null); }
       });
     }
 
-    /** Best-effort system-supported split-screen attempt. No protected app embedding. */
-    @JavascriptInterface public void openWalletAdjacent(){
-      runOnUiThread(()->{
-        Intent i=officialWalletIntent();
-        if(i==null){Toast.makeText(MainActivity.this,"Installiere zuerst Google Wallet.",Toast.LENGTH_LONG).show();return;}
-        // Exit Android immersive mode for the system to arrange two windows.
-        getWindow().getDecorView().setSystemUiVisibility(0);
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        try {
-          i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
-          startActivity(i);
-          Toast.makeText(MainActivity.this,"Fenstermodus angefragt. Das System kann Google Wallet trotzdem im Vollbild öffnen.",Toast.LENGTH_LONG).show();
-        }catch(Exception e){
-          Toast.makeText(MainActivity.this,"Fenstermodus nicht verfügbar: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();
-        }
+    @JavascriptInterface public void openSecuritySettings() {
+      runOnUiThread(() -> {
+        try { startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS)); }
+        catch (Exception e) { start(new Intent(Settings.ACTION_SETTINGS), null); }
       });
     }
 
-
-    @JavascriptInterface public void openPaymentSettings(){
-      runOnUiThread(()->{
-        try{startActivity(new Intent("android.settings.NFC_PAYMENT_SETTINGS"));}
-        catch(Exception e){
-          try{startActivity(new Intent(Settings.ACTION_NFC_SETTINGS));}
-          catch(Exception ignored){}
-        }
-      });
+    @JavascriptInterface public void haptic() {
+      runOnUiThread(() -> { if (web != null) web.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK); });
     }
   }
 
-  @Override protected void onDestroy(){
-    if(readerMode) setReader(false);
-    if(web!=null){web.destroy();web=null;}
+  @Override protected void onDestroy() {
+    if (web != null) { web.destroy(); web = null; }
     super.onDestroy();
   }
 }
