@@ -1,124 +1,220 @@
-<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#050608"><meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; object-src 'none'; frame-src 'none'"><title>Executive Black</title>
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#050608">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; object-src 'none'; frame-src 'none'">
+<title>Executive Black</title>
 <style>
-:root{color-scheme:dark;--gold:#c6bcae;--ice:#e5e7eb;--muted:#737982}*{box-sizing:border-box}html{background:#050608}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 65% 24%,#29303b70,transparent 54%),linear-gradient(150deg,#090c11,#030405 70%);font-family:Arial,Helvetica,sans-serif;color:var(--ice);-webkit-font-smoothing:antialiased}button{font:inherit;cursor:pointer}.app{max-width:620px;margin:auto;padding:calc(env(safe-area-inset-top) + 28px) 22px calc(env(safe-area-inset-bottom) + 40px)}header{display:flex;align-items:center;justify-content:space-between}.brand{display:flex;gap:13px;align-items:center}.mark{font-family:Georgia,serif;font-style:italic;font-size:31px;width:43px;height:43px;text-align:center;line-height:43px;border:1px solid #b3bdc17d;background:linear-gradient(135deg,#27313a,#050609);color:#e9e8e4}.brand-text b{font-size:10px;letter-spacing:3.6px;display:block}.brand-text small{display:block;color:#8b9399;letter-spacing:2px;font-size:8px;margin-top:7px}.round{background:#ffffff08;color:#c4c9ce;border:1px solid #ffffff28;border-radius:100%;width:42px;height:42px;font-size:20px}.edition{display:flex;align-items:center;gap:11px;margin:44px 0 18px;color:#b2a797;letter-spacing:3px;font-size:9px}.edition i{height:1px;flex:1;background:linear-gradient(90deg,#a8a3a65e,transparent)}h1{font-size:clamp(40px,10vw,57px);letter-spacing:-2.8px;font-weight:300;line-height:1.02;margin:0}h1 strong{font-weight:600;color:#fff}p.intro{font-size:11.5px;line-height:1.85;color:#929aa2;max-width:385px;margin:17px 0 0}.deck{margin:36px -9px 0;perspective:1100px;filter:drop-shadow(0 22px 24px #000e)}.card{width:100%;aspect-ratio:1.586;position:relative;transform-style:preserve-3d;transition:transform .75s cubic-bezier(.22,.7,.2,1)}.card.flipped{transform:rotateY(180deg)}.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;border-radius:4% / 6%;border:1px solid #bec7d185;background:radial-gradient(ellipse at 74% 35%,#1c232b,transparent 65%),linear-gradient(128deg,#070a0e,#12161b 55%,#030405)}.face:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,#ffffff0b 0px,#ffffff0b 1px,transparent 1px,transparent 5px),repeating-linear-gradient(-45deg,#ffffff08 0px,#ffffff08 1px,transparent 1px,transparent 5px);clip-path:polygon(0 0,70% 0,34% 51%,0 51%,0 100%,28% 100%,64% 63%,100% 28%,100% 100%,63% 100%,100% 27%,100% 0);opacity:.9}.face:after{content:"";pointer-events:none;position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 2px 0 #ffffff36,inset 0 -1px 0 #ffffff25}.metal-line{position:absolute;left:-5%;top:53%;width:125%;height:1px;transform:rotate(-30deg);background:linear-gradient(90deg,transparent,#9ea8b4bb,#f7fbff77,transparent);box-shadow:0 1px 3px #ffffff3a}.metal-line.bottom{top:84%;transform:rotate(-35deg)}.chip{position:absolute;left:13%;top:29%;width:14%;height:25%;border:2px solid #afb6bf;border-radius:12%;box-shadow:inset 0 0 0 1px #404a51,0 0 10px #f1f4f231;background:linear-gradient(130deg,#d9dce0,#5f6972 47%,#c1cbd1);overflow:hidden}.chip:before{content:"";position:absolute;inset:18% 24%;border:1px solid #4d555c;border-radius:22%}.chip:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 27%,#32383e 27%,#32383e 29%,transparent 29%,transparent 70%,#32383e 70%,#32383e 72%,transparent 72%),linear-gradient(transparent 46%,#515c63 46%,#515c63 48%,transparent 48%)}.nfc{position:absolute;top:9%;right:7%;font-size:26px;color:#dadfe4;transform:rotate(90deg);opacity:.85}.roundel{position:absolute;top:26%;right:19%;width:27%;aspect-ratio:1;border-radius:50%;padding:3%;border:2px solid #adb6c0;box-shadow:0 0 0 2px #0c0e10,inset 0 0 9px #000,0 3px 11px #0009;background:radial-gradient(circle at 30% 20%,#545d66,#020304 60%)}.roundel .word{position:absolute;z-index:1;left:0;right:0;top:3%;font-weight:700;letter-spacing:2px;font-size:clamp(10px,3vw,17px);text-align:center}.quarters{position:absolute;inset:23%;border:2px solid #e4e9ed;border-radius:50%;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;transform:rotate(0deg)}.quarters i:nth-child(1),.quarters i:nth-child(4){background:#1677ac}.quarters i:nth-child(2),.quarters i:nth-child(3){background:#f1f3f3}.quarters i{border:1px solid #22313b}.holder{position:absolute;left:8%;bottom:20%;font-size:clamp(13px,4.0vw,23px);letter-spacing:clamp(3px,.95vw,8px);font-weight:300;text-shadow:0 1px 1px #000}.subtitle{position:absolute;left:8.4%;bottom:11%;font-size:clamp(7px,2vw,10px);letter-spacing:4px;color:#b5b7bb}.tiny-series{position:absolute;right:5%;bottom:6%;font-size:7px;letter-spacing:1.6px;color:#848a93}.reverse{transform:rotateY(180deg)}.reverse .stripe{position:absolute;top:18%;left:0;right:0;height:23%;background:linear-gradient(#090a0b,#24292f 48%,#080a0b);border-block:1px solid #6b707759}.reverse .signature{position:absolute;left:7%;top:52%;width:58%;height:18%;background:linear-gradient(130deg,#9da4aa,#d1d5d9 50%,#7d858c);box-shadow:0 0 0 1px #ffffff38}.reverse .cvv{position:absolute;left:68%;top:52%;width:17%;height:18%;background:#89939b}.reverse .small{position:absolute;top:45%;left:7%;font-size:8px;letter-spacing:2px}.reverse .small.r{left:68%}.reverse .backhead{position:absolute;bottom:16%;left:7%;letter-spacing:3px;font-size:clamp(10px,2.9vw,17px)}.reverse .backsub{position:absolute;bottom:10%;left:7%;letter-spacing:2px;color:#9ca3ac;font-size:7px}.reverse .backbadge{position:absolute;bottom:7%;right:7%;font-size:9px;letter-spacing:2px;border:1px solid #959a9e77;padding:12px 11px}.deckline{display:flex;align-items:center;justify-content:space-between;margin:14px 0 30px}.serial{font-size:8px;letter-spacing:2px;color:#646d78}.flip{background:none;color:#bec6cf;border:0;font-size:10px;letter-spacing:1px;padding:10px}.separator{border-top:1px solid #ffffff24;padding-top:22px;color:#9b9993;letter-spacing:3px;font-size:9px}.status{display:flex;border:1px solid #ffffff25;margin:17px 0 12px;background:#ffffff05}.stat{flex:1;padding:15px 13px}.stat + .stat{border-left:1px solid #ffffff22}.stat small{display:block;letter-spacing:2px;font-size:8px;color:#828c95}.stat b{display:block;letter-spacing:.4px;margin-top:12px;font-size:12px}.dot{display:inline-block;width:7px;height:7px;background:#5e6973;border-radius:50%;margin-right:8px}.dot.ok{background:#92b7a6;box-shadow:0 0 6px #5d9783}.hint{font-size:10px;line-height:1.7;color:#939aa4;margin:0 0 24px}.primary{border:1px solid #ced4ddab;background:linear-gradient(125deg,#e5e7e9,#929ba5);color:#0e131a;display:flex;align-items:center;justify-content:space-between;width:100%;padding:18px;font-size:11px;letter-spacing:2px;font-weight:700}.primary small{display:block;letter-spacing:.4px;font-size:9px;margin-top:8px;font-weight:400}.actions{display:flex;gap:10px;margin-top:12px}.actions button{flex:1;padding:15px 6px;background:#ffffff05;color:#b9c1ca;border:1px solid #ffffff28;font-size:9px;letter-spacing:1.3px}.rows{margin-top:32px;border-top:1px solid #ffffff18}.rows div{display:flex;justify-content:space-between;border-bottom:1px solid #ffffff18;padding:15px 0;gap:8px}.rows span{font-size:8px;color:#77818c;letter-spacing:1.6px}.rows strong{font-size:9px;color:#c1c7cf;letter-spacing:1px}footer{font-size:8px;line-height:1.8;color:#707982;letter-spacing:1px;margin-top:32px}.stage{position:fixed;z-index:50;inset:0;background:radial-gradient(ellipse at 50% 40%,#293340,#050709 75%);display:none;flex-direction:column;align-items:center;padding:calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 25px)}.stage.active{display:flex}.stage-top{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px}.stage-top b{font-size:10px;letter-spacing:3px}.stage-top button{background:transparent;border:1px solid #fff4;color:#c9cbd1;padding:9px 12px}.stage-label{margin:auto 0 12px;color:#b4aba1;font-size:9px;letter-spacing:4px}.stage h2{font-weight:300;font-size:39px;text-align:center;line-height:1.1;margin:0 0 30px}.stage h2 strong{font-weight:600}.stage .card{max-width:590px;transform:none;filter:drop-shadow(0 18px 21px #0009)}.stage .card .reverse{display:none}.stage-info{color:#c4cbd2;font-size:12px;letter-spacing:1px;margin:30px 0 0}.stage-note{color:#8793a0;line-height:1.8;text-align:center;font-size:11px;max-width:360px;margin:16px 0 auto}.stage-end{font-size:9px;letter-spacing:2px;color:#8d9299;margin-top:35px;text-align:center}@media(max-width:370px){.app{padding-left:17px;padding-right:17px}.holder{letter-spacing:3px}.word{font-size:11px}}
-.card{aspect-ratio:1536/961}.face.original-art{background:#080a0b;border:0;border-radius:0}.face.original-art:before,.face.original-art:after{display:none;content:none}.face.original-art img.source-art{display:block;width:100%;height:100%;object-fit:fill}
+:root{
+  --bg:#050608;--ink:#eef0f3;--soft:#a9b0b8;--mute:#6f7780;--line:#ffffff1f;
+  --ok:#8fd1b4;--okglow:#4fb48a;--warn:#e6c07b;--bad:#e79a8a;--steel:#c9d0d8;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;user-select:none}
+body{background:radial-gradient(ellipse 90% 55% at 50% 38%,#1b222c 0%,transparent 70%),linear-gradient(170deg,#0a0d12,#030405 75%)}
+button{font:inherit;color:inherit;cursor:pointer}
 
-.nfc-demo{margin:24px 0 8px;border:1px solid #9d8c6d77;background:linear-gradient(125deg,#1d1b1a,#0e1013);padding:19px 16px 17px}
-.nfc-demo .eyebrow{font-size:9px;letter-spacing:2.8px;color:#d3bf9c}
-.nfc-demo h3{font-size:20px;font-weight:400;letter-spacing:.5px;margin:12px 0 10px}
-.nfc-demo p{font-size:11px;line-height:1.8;color:#a7acb2}
-.nfc-demo button{padding:14px;width:100%;border:1px solid #cfbd9d;background:transparent;color:#e1d1b4;font-size:10px;letter-spacing:1.5px;margin:10px 0}
-.nfc-demo .micro{color:#828991;font-size:10px;line-height:1.7;margin:6px 0}
-.nfc-demo .hard-warning{color:#e9bca9}
-.lab-btn{border:1px solid #aba59b9c;background:#161b20;color:#ddd4c6;width:100%;padding:17px 18px;text-align:left;margin:8px 0 18px;font-size:11px;letter-spacing:1.8px}.lab-panel{display:none;border:1px solid #c0b7aa55;padding:18px;margin:2px 0 19px;background:#101319}.lab-panel.visible{display:block}.lab-panel h3{font-weight:400;letter-spacing:2px;font-size:13px;margin:0 0 10px;color:#ece4d9}.lab-panel p{font-size:11px;line-height:1.7;color:#b3b9c0;margin:6px 0 12px}.lab-panel .lab-state{white-space:pre-line;background:#050608;border:1px solid #ffffff19;padding:14px;font-size:11px;line-height:1.7;color:#cbd2d8}.lab-panel .lab-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:13px}.lab-actions button{border:1px solid #ffffff52;background:#282e35;padding:10px 12px;color:#f1f3f5;font-size:11px}.lab-warning{font-size:10px;color:#e8c98f;margin-bottom:12px}.lab-panel code{font-family:monospace;color:#e8d6b3}.linking{margin:20px 0;padding:19px;background:linear-gradient(130deg,#17202a,#080b0f);border:1px solid #b4bbca6b}
-.linking h3{font-weight:400;font-size:22px;margin:10px 0}.linking .eyebrow{font-size:9px;color:#d5c6b5;letter-spacing:2px}
-.linking p,.linking ol{font-size:11px;line-height:1.75;color:#b2beca}.linking ol{padding-left:19px}
-.linking button{width:100%;padding:16px 10px;background:#e0e5e9;border:1px solid #c6cdd6;color:#0b1015;font-weight:700;letter-spacing:.5px;margin-top:9px}
-.linking button.secondary{background:transparent;color:#dce4e9}.linking .note{color:#a7aab0;border-top:1px solid #ffffff24;padding-top:12px}
-.companion{border:1px solid #b4bbca72;background:linear-gradient(145deg,#151c24,#06090c);padding:20px;margin:25px 0}
-.companion h3{font-size:20px;font-weight:400;margin:12px 0;color:#fff}
-.companion p{font-size:11px;line-height:1.8;color:#aeb8c3}
-.companion .readout{border-top:1px solid #ffffff25;border-bottom:1px solid #ffffff25;padding:12px 2px;color:#d3d9e0;font-size:11px;line-height:1.7;margin:13px 0}
-.companion button{background:#dce3e8;border:1px solid #b9c5d0;color:#121820;font-weight:700;letter-spacing:1.4px;width:100%;padding:17px;margin-top:8px}
-.companion button.secondary{color:#d1dae1;background:transparent}
-.stage .statusbar{margin:16px 0 0;font-size:10px;color:#c4c9ce;line-height:1.6;text-align:center;letter-spacing:1px}
-.lab-panel .lab-toggle{width:100%;padding:12px;background:#283743;border:1px solid #b9c8d099;color:#f2f4f6;margin:10px 0;font-size:11px}
- .stage-switch{background:linear-gradient(130deg,#cad5df,#8f9cab);border:1px solid #dce5ed;display:block;width:100%;max-width:380px;min-height:46px;color:#081017;letter-spacing:1.5px;font-weight:700;font-size:10px;margin-top:13px;flex-shrink:0}
-.wallet-window-test{border:1px solid #c2c9d65c;padding:18px;margin:12px 0 27px;background:#0f141a}
-.wallet-window-test h3{font-size:19px;margin:5px 0 8px;letter-spacing:1px;font-weight:400}
-.wallet-window-test p{color:#abb4bd;font-size:11px;line-height:1.7}
-.wallet-window-test button{display:block;width:100%;border:1px solid #bec9d1;background:#212c37;color:#dce4ea;font-weight:700;font-size:11px;letter-spacing:1px;padding:14px;margin-top:10px}
-</style></head><body><main class="app"><header><div class="brand"><div class="mark">E</div><div class="brand-text"><b>EXECUTIVE BLACK</b><small>PRIVATE DESIGN COLLECTION</small></div></div><button class="round" onclick="settings()" aria-label="Einstellungen">⚙</button></header><div class="edition">01 / BLACK EDITION <i></i> MMXXVI</div><h1>Beyond<br><strong>ordinary.</strong></h1><p class="intro">Ein exklusives, privat gestaltetes Kartenkonzept. Deine echte Zahlung bleibt sicher in Google Wallet.</p><div class="deck" onclick="flip()"><div id="walletCard" class="card"><div class="face original-art"><img class="source-art" src="card-front.jpg" alt="Original BMW Executive card artwork"></div><div class="face reverse"><div class="stripe"></div><span class="small">AUTHORIZED SIGNATURE</span><span class="small r">CVV</span><div class="signature"></div><div class="cvv"></div><div class="backhead">EXECUTIVE BLACK</div><div class="backsub">PERSONAL COLLECTION · PRIVATE EDITION</div><div class="backbadge">E / 01</div></div></div></div><div class="deckline"><span class="serial">PERSONAL CONCEPT · 001</span><button class="flip" onclick="flip()">⟳ KARTE WENDEN</button></div><div class="separator">DEVICE & PAYMENT</div><div class="status"><div class="stat"><small>NFC HARDWARE</small><b><i id="dot" class="dot"></i><span id="nfc">PRÜFEN...</span></b></div><div class="stat"><small>PAYMENT PROVIDER</small><b>GOOGLE WALLET</b></div></div><p class="hint" id="hint">Prüfung der NFC-Funktion. Hinterlege deine Revolut Mastercard direkt in der offiziellen Google Wallet.</p><section class="companion"><div class="eyebrow">EXECUTIVE · TAP COMPANION</div><h3>Deine BMW-Karte ist die Hauptansicht.</h3><p>Starte den BMW-Kartenmodus direkt hier oder über die optionale „Executive Card“-Kachel in den Samsung-Schnelleinstellungen. Google Wallet bleibt für deine Revolut-Zahlung zuständig, ohne dass wir die Wallet-App selbst starten.</p><div class="readout" id="walletReadiness">Prüfe Google Wallet und NFC ...</div><button onclick="stage(true)">BMW-KARTENMODUS STARTEN →</button><button class="secondary" onclick="settings()">GOOGLE WALLET ALS STANDARD FESTLEGEN ⚙</button><p>Android kann eine eigene Zahlungsanzeige einblenden. Wir können sie nicht unterdrücken und keine Zahlung auslesen oder bestätigen.</p></section><section class="wallet-window-test"><div class="eyebrow">BETA · ECHTE GOOGLE-WALLET-APP</div><h3>Google Wallet im BMW-Fenstermodus testen</h3><p>Executive Black bittet Android, die offiziell installierte Google-Wallet-App in einem benachbarten Fenster zu öffnen. Google Wallet bleibt unverändert und verarbeitet die Revolut-Zahlung selbst. Samsung kann die Anfrage ablehnen und Google Wallet im Vollbild anzeigen.</p><button onclick="walletWindow()">ZWEI FENSTER AUSPROBIEREN ↗</button><button onclick="wallet()">OFFIZIELLE WALLET ÖFFNEN ↗</button><p>Keine Einbettung in unsere APK, kein Zugriff auf Karten- oder Zahlungsdaten. Das ist ein reiner Anzeige-Test.</p></section><section class="linking"><div class="eyebrow">SECURE CARD SETUP · OFFIZIELLE DIENSTE</div>
-<h3>Revolut-Karte einrichten</h3>
-<p>Die echte Mastercard wird direkt über Revolut und Google Wallet autorisiert. Executive Black verarbeitet dabei keine Kartendaten und erhält keinen Zahlungstoken.</p>
-<button onclick="revolut()">REVOLUT ÖFFNEN · KARTE HINZUFÜGEN ↗</button>
-<button class="secondary" onclick="wallet()">GOOGLE WALLET ÖFFNEN ↗</button>
-<button class="secondary" onclick="settings()">STANDARD-WALLET EINSTELLEN ⚙</button>
-<ol><li>Revolut → Start → Kartensymbol → Karte auswählen.</li><li>„Zu G Pay hinzufügen“ wählen und die Freigabe bestätigen.</li><li>Google Wallet als Standard-Zahlungsapp auswählen.</li></ol>
-<p class="note">Die echte Zahlungskarte befindet sich danach in Google Wallet, nicht in Executive Black. Die erfolgreiche Freigabe wird ausschließlich von Revolut und Google Wallet angezeigt, nicht von dieser App.</p>
-</section><button class="lab-btn" onclick="toggleLab()">◉ &nbsp; NFC LAB ÖFFNEN &nbsp; <span style="float:right">↗</span></button>
-<section class="lab-panel" id="labPanel">
- <h3>NFC TESTKARTE · TECHNISCHER MODUS</h3>
- <div class="lab-warning">KEINE BANKKARTE · KEINE ZAHLUNG · KEINE REVOLUT-VERKNÜPFUNG</div>
- <p>Diese App besitzt eine echte Android-HCE-Testkennung <code>F00102424D57</code>. Ein zweites Android-Smartphone kann sie im Lesemodus auslesen. Sie verwendet keine Mastercard-Zahlungskennung und ersetzt Google Wallet nicht.</p>
- <div id="labState" class="lab-state">NFC-Prüfung noch nicht gestartet.</div><button class="lab-toggle" id="labToggle" onclick="toggleLabService()">NFC-TESTDIENST EINSCHALTEN (NUR FÜR ZWEI HANDYS)</button>
- <div class="lab-actions"><button onclick="labSelfTest()">Protokoll-Selbsttest</button><button onclick="startLabReader()">Testkarte lesen</button><button onclick="stopLabReader()">Lesemodus aus</button><button onclick="updateLab()">Status aktualisieren</button></div>
- <p>Test mit zwei Geräten: Auf Handy A diese App öffnen, NFC aktivieren und Bildschirm entsperren. Auf Handy B dieselbe App installieren, „Testkarte lesen“ drücken und die Rückseiten annähern. Wenn BMW-HCE-DEMO erkannt wird, funktioniert die Testübertragung. **Nicht** an einer Ladenkasse verwenden.</p>
- <p>Deine echte Revolut-Mastercard bleibt ausschließlich in der offiziellen Google Wallet gespeichert. Für eine eigenständige Zahlung fehlen Bankfreigabe und sichere Zahlungstoken.</p>
-</section><button class="primary" onclick="stage(true)"><span>EXECUTIVE MODUS<small>Privates Design · echte Zahlung via Google Wallet</small></span><span>↗</span></button><div class="actions"><button onclick="wallet()">GOOGLE WALLET ↗</button><button onclick="settings()">NFC-EINSTELLUNGEN ⚙</button></div><section class="nfc-demo" aria-label="NFC-Labormodus">
-<div class="eyebrow">EXPERIMENTAL · NFC LAB</div><h3>Executive NFC Test</h3>
-<p class="hard-warning"><strong>KEINE ECHTE ZAHLUNG.</strong> Diese Version emuliert ein eigenes NFC-Testsignal, keine Revolut- oder Mastercard-Zahlung. Das BMW-Kartenbild bleibt unverändert.</p>
-<p id="demoState">NFC-Diagnose wird geladen …</p>
-<button onclick="selfTest()">NFC-PROTOKOLL INTERN TESTEN ✓</button>
-<button onclick="readerTest()">ZWEITES HANDY ALS NFC-KARTE PRÜFEN ↗</button>
-<button onclick="readerStop()">LESERMODUS BEENDEN ×</button>
-<p class="micro" id="demoLast">Noch keine Testkarte erkannt.</p>
-<p class="micro">Für einen echten Funk-Test brauchst du zwei Android-Geräte mit NFC. Auf dem ersten Gerät startest du den Lesermodus, auf dem zweiten bleibt die Executive-App geöffnet. Google Wallet bleibt Standard für echte Kartenzahlungen.</p>
-</section><div class="rows"><div><span>CARD HOLDER</span><strong>LEON STARK</strong></div><div><span>DESIGN</span><strong>EXECUTIVE BLACK / 01</strong></div><div><span>PAYMENT</span><strong>ANDROID DEFAULT WALLET</strong></div></div><footer>INDEPENDENT PERSONAL CONCEPT · NOT AFFILIATED WITH OR ENDORSED BY BMW, GOOGLE OR REVOLUT. THIS APP DOES NOT STORE PAYMENT CREDENTIALS OR PROCESS PAYMENTS. ANDROID MAY DISPLAY SYSTEM PAYMENT OR SECURITY OVERLAYS.</footer></main><section class="stage" id="stage"><div class="stage-top"><b>EXECUTIVE BLACK</b><button onclick="stage(false)">SCHLIESSEN ×</button></div><div class="stage-label">THE PERSONAL COLLECTION</div><h2>Designed to<br><strong>stand apart.</strong></h2><div style="width:100%;max-width:570px" id="stageMount"></div><div class="stage-info"><i id="sdot" class="dot"></i><span id="stageNfc">NFC prüfen</span></div><div class="statusbar" id="stageProvider">STANDARD-WALLET WIRD GEPRÜFT ...</div><p class="stage-note">BMW ist die Kartenansicht. Die echte Revolut-Zahlung erfolgt weiterhin über Google Wallet. Android kann dessen Oberfläche über unserer Karte anzeigen.</p><button class="stage-switch" onclick="walletWindow()">GOOGLE WALLET DANEBEN TESTEN ↗</button><div class="stage-end">BLACK SERIES · PRIVATE DESIGN · 2026</div></section><script>
-let flipped=false;function flip(){flipped=!flipped;document.getElementById('walletCard').classList.toggle('flipped',flipped)}
-function wallet(){if(window.NativeWallet)NativeWallet.openWallet();else alert('Wallet nur in der Android-App')}
-function walletWindow(){if(window.NativeWallet)NativeWallet.openWalletAdjacent();else alert('Fenstermodus nur in der Android-App')}
-function revolut(){if(window.NativeWallet)NativeWallet.openRevolut();else alert('Revolut über die Android-App öffnen')}
-function settings(){if(window.NativeWallet)NativeWallet.openPaymentSettings();else alert('NFC-Einstellungen nur in der Android-App')}
-function stage(on){let e=document.getElementById('stage'),m=document.getElementById('stageMount');e.classList.toggle('active',on);if(on){m.innerHTML='';let clone=document.getElementById('walletCard').cloneNode(true);clone.classList.remove('flipped');clone.removeAttribute('id');m.appendChild(clone)}if(window.NativeWallet)NativeWallet.setPresentation(on);status();refreshPayment()}
-function refreshPayment(){
-  const el=document.getElementById('walletReadiness'),inStage=document.getElementById('stageProvider');if(!el)return;
-  if(!window.NativeWallet){el.textContent='Wallet-Status nur in der installierten App verfügbar.';return}
-  try{const s=JSON.parse(NativeWallet.paymentState());
-    const w=s.walletDefault==='google'?'Google Wallet als Standard bestätigt':s.walletDefault==='other'?'Eine andere Wallet ist als Standard eingestellt':s.walletDefault==='none'?'Keine Standard-Wallet erkannt':'Standard-Wallet auf diesem Gerät nicht auslesbar';
-    const n=s.nfcOn?'NFC ist aktiv':'NFC ist ausgeschaltet';
-    const lab=s.labEnabled?' · NFC-Testdienst eingeschaltet (für Zahlungen ausschalten)':'';
-    const installed=s.googleInstalled?'Google Wallet installiert':'Google Wallet nicht gefunden';
-    const own=s.bmwIsWalletDefault?' · ACHTUNG: Executive ist Standard-Wallet. Bitte Google Wallet auswählen!':'';
-    el.textContent=installed+' · '+n+lab+own+'. Standard-Wallet bitte in den NFC-Einstellungen kontrollieren. Nur Google Wallet kann den Revolut-Zahlungsstatus prüfen.';
-    if(inStage)inStage.textContent=s.bmwIsWalletDefault?'ACHTUNG · GOOGLE ALS STANDARD WÄHLEN':s.googleInstalled?'GOOGLE WALLET INSTALLIERT · STANDARD PRÜFEN':'GOOGLE WALLET NICHT GEFUNDEN';
-    const toggle=document.getElementById('labToggle');if(toggle)toggle.textContent=s.labEnabled?'NFC-TESTDIENST AUSSCHALTEN (EMPFOHLEN)':'NFC-TESTDIENST EINSCHALTEN (NUR FÜR ZWEI HANDYS)';
-  }catch(e){el.textContent='Der Wallet-Status konnte nicht abgefragt werden.'}
-}
-function toggleLabService(){const p=getLab();if(!p||!window.NativeWallet)return;NativeWallet.setLabEnabled(!p.labEnabled)}
+.app{height:100%;display:flex;flex-direction:column;align-items:center;padding:calc(env(safe-area-inset-top) + 22px) 20px calc(env(safe-area-inset-bottom) + 22px)}
+header{width:100%;max-width:560px;display:flex;justify-content:space-between;align-items:center}
+.word b{display:block;font-size:10px;letter-spacing:4px;font-weight:700}
+.word small{display:block;font-size:8px;letter-spacing:2.4px;color:var(--mute);margin-top:6px}
+.icon-btn{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:#ffffff06;display:grid;place-items:center}
+.icon-btn svg{width:19px;height:19px;stroke:var(--steel)}
 
+.center{flex:1;width:100%;max-width:560px;display:flex;flex-direction:column;justify-content:center;gap:34px;min-height:0}
 
+/* Card */
+.deck{perspective:1200px;width:100%}
+.card{position:relative;width:100%;aspect-ratio:1459/885;transform-style:preserve-3d;transition:transform .8s cubic-bezier(.22,.7,.2,1);filter:drop-shadow(0 26px 30px #000c)}
+.card.flipped{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:3.3%/5.4%;overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.front img{width:100%;height:100%;display:block;object-fit:cover}
+.sheen{position:absolute;inset:-30%;background:linear-gradient(105deg,transparent 40%,#ffffff1c 48%,#ffffff08 52%,transparent 60%);transform:translateX(var(--sx,-30%));pointer-events:none;mix-blend-mode:screen;transition:transform .25s ease-out}
+.back{transform:rotateY(180deg);background:radial-gradient(ellipse at 70% 30%,#1c232b,transparent 65%),linear-gradient(128deg,#07090d,#13171c 55%,#030405);border:1px solid #c2cad466}
+.back .stripe{position:absolute;top:14%;left:0;right:0;height:21%;background:linear-gradient(#08090a,#23282e 50%,#08090a)}
+.back .sig{position:absolute;left:7%;top:48%;width:58%;height:15%;background:linear-gradient(130deg,#9aa2a9,#d0d4d8 50%,#7b838b)}
+.back .lbl{position:absolute;left:7%;top:42%;font-size:7px;letter-spacing:2px;color:#9aa1a9}
+.back .name{position:absolute;left:7%;bottom:15%;font-size:clamp(10px,3vw,16px);letter-spacing:4px}
+.back .sub{position:absolute;left:7%;bottom:9%;font-size:7px;letter-spacing:2px;color:#8c939b}
+.back .pay{position:absolute;right:7%;bottom:9%;font-size:7px;letter-spacing:1.6px;color:#8c939b;text-align:right;line-height:1.7}
 
-function selfTest(){
- if(!window.NativeWallet){alert('Bitte die Android-App installieren.');return}
- try{alert(NativeWallet.logicSelfTest()?'NFC-Protokolltest erfolgreich. Nur Softwaretest, keine echte Bezahlung.':'NFC-Protokolltest fehlgeschlagen.')}catch(e){alert('Test noch nicht verfügbar.')}
- drawDemo();
+/* Status */
+.status{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}
+.pulse{position:relative;width:64px;height:64px;display:grid;place-items:center}
+.pulse svg{width:30px;height:30px;stroke:var(--tone);position:relative;z-index:1}
+.pulse i{position:absolute;inset:14px;border-radius:50%;border:1px solid var(--tone);opacity:0}
+.ready .pulse i{animation:ring 2.6s ease-out infinite}
+.ready .pulse i:nth-child(2){animation-delay:.87s}.ready .pulse i:nth-child(3){animation-delay:1.74s}
+@keyframes ring{0%{transform:scale(.6);opacity:.7}100%{transform:scale(2);opacity:0}}
+.status h1{margin:0;font-size:13px;letter-spacing:3.4px;font-weight:700;color:var(--tone)}
+.status p{margin:0;font-size:13px;line-height:1.6;color:var(--soft);max-width:330px}
+.status .fix{margin-top:6px;border:1px solid var(--tone);background:transparent;color:var(--tone);padding:13px 22px;font-size:10px;letter-spacing:2px;font-weight:700;border-radius:2px}
+.status{--tone:var(--mute)}.status.ready{--tone:var(--ok)}.status.warn{--tone:var(--warn)}.status.bad{--tone:var(--bad)}
+
+footer{width:100%;max-width:560px;display:flex;gap:10px}
+footer button{flex:1;padding:15px 8px;border:1px solid var(--line);background:#ffffff05;font-size:10px;letter-spacing:1.8px;color:var(--steel);display:flex;align-items:center;justify-content:center;gap:9px}
+footer svg{width:15px;height:15px;stroke:var(--steel)}
+
+/* Setup sheet */
+.scrim{position:fixed;z-index:10;inset:0;background:#000a;opacity:0;pointer-events:none;transition:opacity .3s}
+.sheet{position:fixed;z-index:11;left:0;right:0;bottom:0;max-height:88%;overflow:auto;background:linear-gradient(#11161c,#0a0d11);border-top:1px solid #ffffff2a;border-radius:18px 18px 0 0;padding:10px 22px calc(env(safe-area-inset-bottom) + 26px);transform:translateY(105%);transition:transform .38s cubic-bezier(.2,.8,.2,1)}
+.open .scrim{opacity:1;pointer-events:auto}.open .sheet{transform:none}
+.grab{width:38px;height:4px;border-radius:2px;background:#ffffff30;margin:0 auto 18px}
+.sheet .inner{max-width:560px;margin:auto}
+.sheet h2{font-size:22px;font-weight:300;margin:0 0 6px;letter-spacing:-.3px}
+.sheet h2 b{font-weight:600}
+.sheet .lead{font-size:12.5px;line-height:1.65;color:var(--soft);margin:0 0 18px}
+.step{display:flex;gap:14px;align-items:flex-start;padding:15px 0;border-top:1px solid var(--line)}
+.mark{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;border:1px solid var(--mute);color:var(--mute)}
+.step.ok .mark{border-color:var(--ok);color:#06110c;background:var(--ok)}
+.step.todo .mark{border-color:var(--warn);color:var(--warn)}
+.step .txt{flex:1;min-width:0}
+.step b{display:block;font-size:13.5px;font-weight:600}
+.step span{display:block;font-size:12px;line-height:1.55;color:var(--soft);margin-top:4px}
+.step button{flex:none;align-self:center;border:1px solid #ffffff3a;background:#ffffff0a;padding:10px 12px;font-size:10px;letter-spacing:1.2px;color:var(--ink);border-radius:2px}
+.how{margin-top:10px;padding:16px;border:1px solid var(--line);background:#ffffff04}
+.how b{font-size:10px;letter-spacing:2.4px;color:var(--steel)}
+.how ol{margin:10px 0 0;padding-left:18px;font-size:12.5px;line-height:1.75;color:var(--soft)}
+.done{width:100%;margin-top:18px;padding:16px;border:0;background:linear-gradient(125deg,#e6e9ec,#9aa3ad);color:#0b1016;font-weight:700;letter-spacing:2px;font-size:11px;border-radius:2px}
+.legal{font-size:9px;line-height:1.7;color:var(--mute);margin-top:16px;letter-spacing:.3px}
+
+@media (orientation:landscape) and (max-height:520px){
+  .app{flex-direction:row;flex-wrap:wrap;padding:14px 22px}
+  header{max-width:none}
+  .center{flex-direction:row;max-width:none;gap:28px;align-items:center}
+  .deck{flex:1.4;max-height:100%;display:flex;align-items:center}
+  .status{flex:1}
+  footer{display:none}
 }
-function readerTest(){
- if(!window.NativeWallet){alert('Der Lesermodus benötigt die Android-App.');return}
- NativeWallet.setReaderMode(true);
- setTimeout(drawDemo,250); 
+</style>
+</head>
+<body>
+<main class="app" id="app">
+  <header>
+    <div class="word"><b>EXECUTIVE BLACK</b><small>PERSONAL COLLECTION · 01</small></div>
+    <button class="icon-btn" onclick="sheet(true)" aria-label="Einrichtung">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <section class="center">
+    <div class="deck" onclick="flip()">
+      <div class="card" id="card">
+        <div class="face front"><img src="card.jpg" alt="BMW Executive Karte"><div class="sheen" id="sheen"></div></div>
+        <div class="face back">
+          <div class="stripe"></div><span class="lbl">AUTHORIZED SIGNATURE</span><div class="sig"></div>
+          <div class="name">EXECUTIVE BLACK</div><div class="sub">PERSONAL COLLECTION · PRIVATE EDITION</div>
+          <div class="pay">ZAHLUNG ÜBER<br>GOOGLE WALLET</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="status">
+      <div class="pulse"><i></i><i></i><i></i>
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round"><path d="M6 8.5a5 5 0 0 1 0 7"/><path d="M9.5 6a9 9 0 0 1 0 12"/><path d="M13 3.5a13 13 0 0 1 0 17"/></svg>
+      </div>
+      <h1 id="sTitle">PRÜFE …</h1>
+      <p id="sText">Einen Moment.</p>
+      <button class="fix" id="sFix" hidden></button>
+    </div>
+  </section>
+
+  <footer>
+    <button onclick="call('openWallet')"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg>GOOGLE WALLET</button>
+    <button onclick="sheet(true)"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>EINRICHTUNG</button>
+  </footer>
+</main>
+
+<div id="setup">
+  <div class="scrim" onclick="sheet(false)"></div>
+  <div class="sheet" role="dialog" aria-label="Einrichtung">
+    <div class="grab"></div>
+    <div class="inner">
+      <h2>Mit der <b>BMW-Karte</b> bezahlen</h2>
+      <p class="lead">Deine Bankkarte liegt sicher in Google Wallet. Executive Black zeigt vorne die BMW-Karte, Google Wallet bezahlt im Hintergrund. Einmal einrichten, dann nur noch App öffnen und ans Terminal halten.</p>
+      <div id="steps"></div>
+      <div class="how"><b>SO BEZAHLST DU</b>
+        <ol>
+          <li>Executive Black öffnen – oder über die Kachel „Executive Card“ in den Schnelleinstellungen.</li>
+          <li>Handy entsperrt mit der Rückseite ans Terminal halten.</li>
+          <li>Google Wallet blendet kurz sein Häkchen ein – das ist die Zahlungsbestätigung. Danach bist du wieder bei der BMW-Karte.</li>
+        </ol>
+      </div>
+      <button class="done" onclick="sheet(false)">FERTIG</button>
+      <p class="legal" id="legal">Privates Designkonzept, nicht mit BMW, Google oder Revolut verbunden. Diese App speichert keine Kartendaten, emuliert keine Karte und sieht keine Zahlung – die Zahlung verarbeitet ausschließlich Google Wallet.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const X = window.Executive || null;
+function call(fn){ try{ if(X&&X[fn]) X[fn](); }catch(e){} }
+function haptic(){ call('haptic'); }
+
+let flipped=false;
+function flip(){ flipped=!flipped; document.getElementById('card').classList.toggle('flipped',flipped); haptic(); }
+
+function readState(){
+  if(!X) return {preview:true,nfcSupported:true,nfcOn:true,hce:true,secure:true,wallet:true,revolut:true,walletDefault:'unknown',version:'Vorschau'};
+  try{ return JSON.parse(X.state()); }catch(e){ return {}; }
 }
-function readerStop(){
- if(window.NativeWallet)NativeWallet.setReaderMode(false);
- setTimeout(drawDemo,250);
+
+/* Order matters: first blocking problem wins the main status. */
+function evaluate(s){
+  if(!s.nfcSupported) return {cls:'bad',title:'KEIN NFC',text:'Dieses Gerät hat kein NFC. Kontaktlos bezahlen ist damit nicht möglich.'};
+  if(!s.nfcOn) return {cls:'warn',title:'NFC IST AUS',text:'Schalte NFC ein, damit Google Wallet am Terminal bezahlen kann.',fix:['NFC EINSCHALTEN','openNfcSettings']};
+  if(!s.wallet) return {cls:'warn',title:'GOOGLE WALLET FEHLT',text:'Installiere Google Wallet und füge dort deine Bankkarte hinzu.',fix:['INSTALLIEREN','openWallet']};
+  if(!s.secure) return {cls:'warn',title:'DISPLAYSPERRE FEHLT',text:'Google Wallet bezahlt nur mit PIN, Muster oder Fingerabdruck.',fix:['SPERRE EINRICHTEN','openSecuritySettings']};
+  return {cls:'ready',title:'BEREIT ZUM BEZAHLEN',text:'Entsperrt ans Terminal halten. Die Zahlung läuft über deine Karte in Google Wallet.'};
 }
-function drawDemo(){
- const s=document.getElementById('demoState'), last=document.getElementById('demoLast');
- if(!s||!last)return;
- if(!window.NativeWallet){s.textContent='NFC-Test erst in der Android-App möglich.';return}
- try{
-  const x=JSON.parse(NativeWallet.diagnostics());
-  s.textContent=!x.hceSupported?'Dieses Gerät unterstützt keine NFC-Kartenemulation.':!x.nfcOn?'NFC ist ausgeschaltet. Bitte aktivieren.':x.readerMode?'NFC-Lesermodus läuft · Gerät an ein zweites NFC-Handy halten.':x.labEnabled?'BMW-Testkarte aktiv · keine echte Zahlung.':'BMW-Testkarte ausgeschaltet · Google Wallet nicht beeinträchtigt.';
-  let d=x.tapCount>0?('Dieses Gerät wurde '+x.tapCount+'× als Testkarte erkannt. '):'Dieses Gerät wurde noch nicht als Testkarte erkannt. ';
-  last.textContent=d+'Letzter Lesertest: '+(x.lastReader||'Keiner')+'.';
- }catch(e){s.textContent='NFC-Diagnose konnte nicht gelesen werden.';}
+
+function steps(s){
+  const def = s.walletDefault==='yes';
+  return [
+    {ok:s.nfcOn, t:'NFC eingeschaltet', d:s.nfcSupported?'Wird für kontaktloses Bezahlen gebraucht.':'Dieses Gerät hat kein NFC.', b:['ÖFFNEN','openNfcSettings']},
+    {ok:s.secure, t:'Displaysperre eingerichtet', d:'PIN, Muster oder Fingerabdruck – Pflicht für Google Wallet.', b:['ÖFFNEN','openSecuritySettings']},
+    {ok:s.wallet, t:'Google Wallet installiert', d:'Die eigentliche Bezahl-App im Hintergrund.', b:[s.wallet?'ÖFFNEN':'INSTALLIEREN','openWallet']},
+    {ok:s.wallet?null:false, t:'Bankkarte in Google Wallet', d:'In Revolut: Karte → „Zu Google Wallet hinzufügen“. Ob sie aktiv ist, zeigt nur Google Wallet.', b:['REVOLUT','openRevolut']},
+    {ok:def?true:null, t:'Google Wallet als Standard', d:def?'Bestätigt: Google Wallet ist die Standard-Zahlungs-App.':'Einstellungen → NFC → Kontaktlose Zahlungen → Google Wallet. Android lässt das nicht immer auslesen – bitte einmal prüfen.', b:['PRÜFEN','openPaymentSettings']}
+  ];
 }
-setInterval(drawDemo,2500);
-function status(){let n=document.getElementById('nfc'),h=document.getElementById('hint'),d=document.getElementById('dot'),sd=document.getElementById('sdot'),sn=document.getElementById('stageNfc');let x={};try{if(window.NativeWallet)x=JSON.parse(NativeWallet.state())}catch(e){}if(!window.NativeWallet){n.textContent='VORSCHAU';sn.textContent='NFC-Status nur in der App';return}if(!x.supported){n.textContent='NICHT VERFÜGBAR';sn.textContent='NFC nicht verfügbar';h.textContent='Dein Gerät meldet keine NFC-Hardware.'}else if(!x.enabled){n.textContent='DEAKTIVIERT';sn.textContent='NFC deaktiviert';h.textContent='Aktiviere NFC und richte Google Wallet als Standard ein.'}else{n.textContent='AKTIV';sn.textContent='NFC aktiviert · Wallet separat einrichten';d.classList.add('ok');sd.classList.add('ok');h.textContent='NFC-Hardware aktiv. Diese App kann nicht prüfen, ob Revolut zahlungsbereit ist.'}}status();
-drawDemo();
-function toggleLab(){const panel=document.getElementById('labPanel');panel.classList.toggle('visible');if(panel.classList.contains('visible'))updateLab()}
-function getLab(){try{return window.NativeWallet?JSON.parse(NativeWallet.diagnostics()):null}catch(e){return null}}
-function updateLab(){const target=document.getElementById('labState');if(!target)return;const p=getLab();if(!p){target.textContent='NFC-LAB ist nur in der installierten Android-App verfügbar.';return}
- const parts=['NFC: '+(p.nfcOn?'aktiv':p.supported?'deaktiviert':'nicht unterstützt'),
- 'HCE-Testkartenemulation: '+(p.hceSupported?'unterstützt':'nicht verfügbar'),
- 'BMW-Testdienst: '+(p.labEnabled?'eingeschaltet':'ausgeschaltet (empfohlen)'),
- 'BMW-Demo AID: '+p.testAid,
- 'Erkannte Demo-Kontakte: '+p.tapCount,
- 'Lesemodus: '+(p.readerMode?'eingeschaltet':'ausgeschaltet'),
- 'Letzter Test: '+p.lastReader];target.textContent=parts.join('\n')}
-function labSelfTest(){if(!window.NativeWallet){alert('Nur in der Android-App');return}
- const ok=NativeWallet.logicSelfTest();alert(ok?'HCE-Protokoll-Selbsttest erfolgreich. Das beweist noch keine echte NFC-Übertragung.':'Protokoll-Selbsttest fehlgeschlagen.');updateLab()}
-function startLabReader(){if(!window.NativeWallet)return;NativeWallet.setReaderMode(true);updateLab();alert('Lesemodus gestartet. Bitte das zweite Android-Gerät mit aktivem NFC an die Rückseite halten. Danach Status aktualisieren.')}
-function stopLabReader(){if(window.NativeWallet)NativeWallet.setReaderMode(false);updateLab()}
-</script></body></html>
+
+function render(){
+  const s=readState(), e=evaluate(s);
+  const st=document.getElementById('status');
+  st.className='status '+e.cls;
+  document.getElementById('sTitle').textContent=e.title;
+  document.getElementById('sText').textContent=e.text;
+  const fix=document.getElementById('sFix');
+  if(e.fix){ fix.hidden=false; fix.textContent=e.fix[0]; fix.onclick=()=>call(e.fix[1]); } else fix.hidden=true;
+
+  const box=document.getElementById('steps'); box.innerHTML='';
+  steps(s).forEach((x,i)=>{
+    const row=document.createElement('div');
+    row.className='step '+(x.ok===true?'ok':x.ok===false?'todo':'');
+    row.innerHTML='<div class="mark">'+(x.ok===true?'✓':(i+1))+'</div><div class="txt"><b></b><span></span></div>';
+    row.querySelector('b').textContent=x.t; row.querySelector('span').textContent=x.d;
+    if(x.ok!==true){ const btn=document.createElement('button'); btn.textContent=x.b[0]; btn.onclick=()=>call(x.b[1]); row.appendChild(btn); }
+    box.appendChild(row);
+  });
+  document.getElementById('legal').dataset.v=s.version||'';
+}
+window.refresh=render;
+
+function sheet(on){ document.body.classList.toggle('open',on); if(on) render(); }
+
+/* Light sheen follows the phone's tilt. */
+window.addEventListener('deviceorientation',ev=>{
+  if(ev.gamma==null) return;
+  const x=Math.max(-1,Math.min(1,ev.gamma/35));
+  document.getElementById('sheen').style.setProperty('--sx',(x*40-5)+'%');
+});
+
+render();
+setInterval(render,4000);
+try{ if(!localStorage.getItem('setupSeen')){ localStorage.setItem('setupSeen','1'); if(evaluate(readState()).cls!=='ready'||readState().walletDefault!=='yes') setTimeout(()=>sheet(true),700); } }catch(e){}
+</script>
+</body>
+</html>

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="demo_hce_description">Executive Black – NFC-Testwallet (keine echte Zahlung)</string>
-  <string name="demo_aid_description">Executive Black Testprotokoll ohne Bankdaten</string>
+  <string name="app_name">Executive Black</string>
 </resources>
