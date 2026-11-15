@@ -66,3 +66,17 @@ test('too few samples produce insufficient status and no deployable model',()=>{
   assert.equal(r.status,'INSUFFICIENT_DATA');
   assert.equal(r.model,undefined);
 });
+
+test('three distinct meme coin mints yield at least one genuinely unseen token report',()=>{
+ const items=['MintA','MintB','MintC'].flatMap((pool,j)=>
+  Array.from({length:25},(_,i)=>({pool,at:1700000100+i*3600,
+   features:Array.from({length:10},(_,k)=>(j+1)*.01+(k+1)*.01+i*.001),
+   label:Number(i%3===0),netPct:i%3===0?3.0:-2.0})));
+ const s=splitExamples(items);
+ assert.equal(s.pools,3);
+ assert.equal(s.unseenPools,1);
+ assert.ok(s.unseenPoolTest.length>0);
+ assert.ok(s.train.length>0);
+ const seen=new Set(s.train.map(x=>x.pool));
+ assert.ok(s.unseenPoolTest.every(x=>!seen.has(x.pool)));
+});

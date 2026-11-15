@@ -1,8 +1,20 @@
-# MemePulse AI v0.6 — Native Android Trading Terminal
+# MemePulse AI v0.8 — Native Android Trading Terminal
 
 Eine eigenständige Android-App und Node.js-Solana-Trading-Backend im separaten Feature-Branch des BMW-Repositories. Das vorhandene BMW-Projekt unter /app bleibt unverändert.
 
 **Vollständige Anleitung auf Deutsch: [SETUP-DE.md](SETUP-DE.md)**
+
+## NEU in v0.8 — erweiterte Meme-Historie und schärfere Echtgeldkontrollen
+
+**Einrichtungs- und Sicherheitsanleitung: [LIVE-SAFETY-V08-DE.md](LIVE-SAFETY-V08-DE.md)**
+
+- Verifizierte Solana-Meme-Coin-Daten aus CoinGecko/GeckoTerminal: echte Ziel-Mint-Adresse in jedem OHLCV-Abruf, bis zu 3 historische Kerzenseiten und alternative DEX-Pools. Keine künstlichen Preise.
+- Das statistische Meme-Research-Modell bleibt SHADOW_ONLY; es autorisiert keine Blockchain-Orders, solange kein nachgewiesener sicherer Modell-Livepfad und externer Audit vorhanden sind.
+- Jupiter-v2-Swap-Transaktionen benötigen einen überprüften Signierer und begrenzte SOL-Wrapping-Anweisungen. Unbekannte Systemtransfers werden verworfen.
+- **Jeder echte Swap** erfordert vorher eine erfolgreiche Solana-RPC-Simulation und danach eine Signaturprüfung, echte Ausführungsbeträge und einen unabhängigen bestätigten RPC-Beleg der Wallet.
+- Bei ausstehenden/ungeklärten Ausführungen oder alten Ledger-Einträgen ohne Blockchain-Beleg werden weitere Signaturen blockiert.
+- Der öffentliche Mainnet-Test hat RPC-Genesis und echte Jupiter-Quote **ohne Wallet, Signatur oder Geld** bestätigt; keine echte Echtgeldtransaktion ausgeführt.
+- **Kein sicherer Produktionsbetrieb nachgewiesen:** kein unabhängiger Code-Audit, kein echter End-to-End-Minimal-Swap, kein bereitgestellter Server oder Wallet, keine integrierte Auszahlung in Android. Bitte noch kein Echtgeld einzahlen.
 
 ## Ohne Grok und ohne externe Sprachmodell-API
 

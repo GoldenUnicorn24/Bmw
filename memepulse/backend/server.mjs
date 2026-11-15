@@ -8,6 +8,8 @@ import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
 import { researchStatus } from './research/status.mjs';
 import { separateMarketReports } from './research/market-status.mjs';
 import {createWithdrawalService,SOL_MAINNET_GENESIS} from './withdrawal.mjs';
+import {inspectSwapTransaction,validateSwapSimulation,checkJupiterExecution,
+  verifySwapChainReceipt,waitForConfirmedReceipt} from './swapGuard.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -174,6 +176,9 @@ function assertCanTrade() {
   if (withdrawalSvc.uncertain()) throw Error('Withdrawal requires manual blockchain reconciliation');
   if (!LIVE) throw Error('Echtgeldhandel ist serverseitig deaktiviert');
   if (!signer) throw Error('Kein Trading-Wallet auf dem Server');
+  if (shouldHaltForUnknown(journal)) throw Error('Ungeklärte Blockchain-Ausführung; keine weitere Signatur zulässig');
+  if (journal.some(t=>t.status==='SUCCESS' && t.rpcReceiptChecked !== true))
+    throw Error('Alte Transaktionsdaten ohne unabhängigen RPC-Beleg: manuelle Ledger-Prüfung nötig');
   if (fs.existsSync(STOP_FILE)) throw Error('STOP-Datei vorhanden: alle Trades gesperrt');
   if (busy) throw Error('Ein Trade wird bereits ausgeführt');
 }
@@ -232,6 +237,14 @@ async function prepareOrder(body, source = 'MANUAL') {
   const quote = await jsonFetch('https://api.jup.ag/swap/v2/order?' + params,
     { headers: { 'x-api-key': JUPITER_KEY } });
   if (!quote.transaction || !quote.requestId || !quote.outAmount) throw Error('Jupiter hat keine handelbare Route geliefert');
+  if (quote.inputMint && quote.inputMint !== params.get('inputMint'))
+    throw Error('Jupiter quoted unexpected input mint');
+  if (quote.outputMint && quote.outputMint !== params.get('outputMint'))
+    throw Error('Jupiter quoted unexpected output mint');
+  // Reject unsupported, multisigner and opaque program-ID transactions BEFORE
+  // creating a quote. This checks the envelope, not the audited swap semantics.
+  const unsignedTx = VersionedTransaction.deserialize(Buffer.from(quote.transaction, 'base64'));
+  inspectSwapTransaction(unsignedTx, signer.publicKey, {side,mint,amountLamports:String(amount)});
   if (Number.isFinite(Number(quote.priceImpactPct)) && quote.priceImpactPct !== null &&
     Math.abs(Number(quote.priceImpactPct)) > MAX_PRICE_IMPACT_PCT)
     throw Error('Jupiter-Preiswirkung oberhalb der Risikogrenze');
@@ -275,33 +288,58 @@ async function executeOrder(id, source) {
   if (order.side === 'BUY' && confirmedPositions(journal).positions.some(p => p.mint === order.mint))
     reasons.push('Token bereits gehalten');
   if (reasons.length) throw Error('Trade wegen Limit gestoppt: ' + reasons.join('; '));
+  // No journal entry if a route fails local structural validation; no transfer
+  // could have been signed or sent at this point.
+  const tx = VersionedTransaction.deserialize(Buffer.from(order.transaction, 'base64'));
+  const inspected = inspectSwapTransaction(tx, signer.publicKey, order);
+  if (!inspected?.payer) throw Error('Unverified Jupiter route');
+  tx.sign([signer]); // The only permitted signer; secret never leaves backend.
+  const signed = Buffer.from(tx.serialize()).toString('base64');
+  const localSignature = bs58.encode(Buffer.from(tx.signatures[0]));
+  // A simulation may reject a legitimate route; in that case, do NOT broadcast.
+  // We never weaken this preflight for trade convenience.
+  const simulated = await rpc('simulateTransaction',[signed,{
+    encoding:'base64',commitment:'processed',sigVerify:true,replaceRecentBlockhash:false
+  }]);
+  const simulation=validateSwapSimulation(simulated);
+  if(Date.now()-order.created>CONTROL_MAX_AGE_MS)
+    throw Error('Quote expired during simulation; request a fresh quote');
   const entry = { id, at: Date.now(), side: order.side, mint: order.mint,
     amountLamports: order.amountLamports, estimatedOutputAtomic: order.estimatedOutputAtomic,
-    entryPriceUsd: order.market?.priceUsd ?? null,
-    source, status: 'SUBMITTED', signature: null };
+    entryPriceUsd: order.market?.priceUsd ?? null, source, status: 'SUBMITTED',
+    signature: localSignature, envelope: inspected, simulation, rpcReceiptChecked: false };
   journal.push(entry);
-  saveJournal(); // Block duplicate spending BEFORE broadcasting.
+  saveJournal(); // Persistent unknown-risk lock BEFORE any broadcast.
   try {
-    const tx = VersionedTransaction.deserialize(Buffer.from(order.transaction, 'base64'));
-    if (!tx.message.staticAccountKeys.some(k => k.equals(signer.publicKey)))
-      throw Error('Signer nicht in der Jupiter-Transaktion gefunden');
-    tx.sign([signer]); // Secret remains on backend only.
-    const signed = Buffer.from(tx.serialize()).toString('base64');
     const result = await jsonFetch('https://api.jup.ag/swap/v2/execute', {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': JUPITER_KEY },
       body: JSON.stringify({ signedTransaction: signed, requestId: order.requestId })
     });
-    entry.signature = result.signature || null;
-    entry.actualInputAtomic = result.totalInputAmount || null;
-    entry.actualOutputAtomic = result.totalOutputAmount || null;
-    entry.status = result.status === 'Success' ? 'SUCCESS' : 'FAILED';
-    entry.error = result.status === 'Success' ? null : String(result.error || result.code || 'Jupiter-Ausführung fehlgeschlagen');
-    if (entry.status === 'SUCCESS' && order.side === 'BUY') cooldown.set(order.mint, Date.now());
-    if (entry.status === 'SUCCESS') agentEvent('EXECUTION_' + order.side, order.mint.slice(0, 12) + ' · ' + source);
+    const verified = checkJupiterExecution(result, tx, order,
+      { maxSlippageBps: MAX_SLIPPAGE_BPS });
+    // Provider "Success" is insufficient for local wallet accounting:
+    // demand a matching signature and a successful, independent RPC receipt.
+    const receipt = await waitForConfirmedReceipt(rpc, verified.signature);
+    const chain = verifySwapChainReceipt(receipt,{
+      signature: verified.signature, side: order.side, mint: order.mint,
+      wallet: address, inputAtomic: verified.inputAtomic,
+      outputAtomic: verified.outputAtomic
+    });
+    entry.actualInputAtomic = verified.inputAtomic;
+    entry.actualOutputAtomic = verified.outputAtomic;
+    entry.rpcReceiptChecked = true;
+    entry.chainTokenDeltaAtomic = chain.changedTokenAtomic;
+    entry.chainNativeSolDeltaAtomic = chain.nativeSolDeltaLamports;
+    entry.status = 'SUCCESS';
+    entry.confirmedAt = Date.now();
+    if (order.side === 'BUY') cooldown.set(order.mint, Date.now());
+    agentEvent('CONFIRMED_' + order.side, order.mint.slice(0, 12) + ' · ' + source);
     saveJournal();
-    return { id, status: entry.status, signature: entry.signature, error: entry.error || null };
+    return { id, status: 'SUCCESS', signature: verified.signature,
+      rpcReceiptChecked: true, error: null };
   } catch (err) {
-    // May have landed despite timeout. Never auto-resubmit an unknown swap.
+    // The chain might have landed despite timeout/ambiguous provider result.
+    // NEVER treat this as an order to automatically retry.
     entry.status = 'UNKNOWN';
     entry.error = String(err.message).slice(0, 200);
     saveJournal();
@@ -446,7 +484,19 @@ const server = http.createServer(async (req, res) => {
       live: LIVE, autoAllowed: AUTO_ALLOWED, autoActive: activeUntil > Date.now(),
       exitOnlyActive: exitOnlyUntil > Date.now() && activeUntil <= Date.now(),
       autoExpiresAt: activeUntil || null, exitProtectionExpiresAt: exitOnlyUntil || null,
-      engineConnected: true, strategyName: 'MemePulse Quant v1', engineVersion: 'memepulse-quant-v1-autopilot2', wallet: address, whitelistedMints: [...ALLOWLIST],
+      engineConnected: true, strategyName: 'MemePulse Quant v1',
+      engineVersion: 'memepulse-quant-v1-autopilot2',
+      liveReadiness: {
+        configured: !!(LIVE && signer && JUPITER_KEY),
+        walletPresent: !!signer, mainnetNetworkVerifiedOnEachOrder: true,
+        walletSignatureRequired: true, preflightSimulationRequired: true,
+        jupiterExecutionSignatureMatchRequired: true,
+        actualFillAmountRequired: true, independentRpcReceiptRequired: true,
+        verifiedMemeResearchModelUsedForLive: false,
+        audited: false, realMoneyEndToEndTested: false,
+        note: 'Only technical checks, no independent audit or tested profitable strategy. Funding alone does not authorise trades.'
+      },
+      wallet: address, whitelistedMints: [...ALLOWLIST],
       maxTradeSol: Number(MAX_TRADE) / 1e9, maxDailySpendSol: Number(MAX_DAILY) / 1e9,
       maxOrdersPerDay: MAX_ORDERS, maxOpenPositions: MAX_OPEN_POSITIONS,
       positionSizing: 'max 2% of wallet liquidity, 0.5% SOL stop-equivalent loss budget',
