@@ -33,13 +33,13 @@ import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.min
 
-private val Background = Color(0xFF090B14)
-private val Panel = Color(0xFF151927)
-private val Panel2 = Color(0xFF1B2031)
-private val Violet = Color(0xFFAB8EFF)
-private val Green = Color(0xFF5AE7AC)
-private val Red = Color(0xFFFF6D8D)
-private val Muted = Color(0xFF9098AD)
+private val Background = Color(0xFF070B16)
+private val Panel = Color(0xFF111A2C)
+private val Panel2 = Color(0xFF1B2840)
+private val Violet = Color(0xFFAE95FF)
+private val Green = Color(0xFF42E5AC)
+private val Red = Color(0xFFFF6E94)
+private val Muted = Color(0xFF9BAAC3)
 private val White = Color(0xFFF5F6FD)
 
 class MainActivity : ComponentActivity() {
@@ -61,10 +61,12 @@ private fun MemePulse(s: MemeStore) {
         background = Background, surface = Panel, onSurface = White,
         onBackground = White, error = Red
     )
-    LaunchedEffect(s.realMarket) {
-        while (!s.realMarket) {
-            delay(7000)
-            if (s.activePage == 0 || s.activePage == 1) s.simulateDemoTick()
+    // Live data is refreshed only while this UI is alive; a backend is required for 24/7 operation.
+    LaunchedEffect(s.realMarket, s.paperBotEnabled) {
+        while (true) {
+            delay(if (s.paperBotEnabled) 45000 else if (s.realMarket) 90000 else 7000)
+            if (s.paperBotEnabled || (s.realMarket && s.activePage == 1)) s.refreshMarket()
+            else if (!s.realMarket && (s.activePage == 0 || s.activePage == 1)) s.simulateDemoTick()
         }
     }
     MaterialTheme(colorScheme = scheme) {
@@ -73,8 +75,9 @@ private fun MemePulse(s: MemeStore) {
             topBar = { Header(s) },
             bottomBar = {
                 NavigationBar(containerColor = Panel) {
-                    listOf(Triple("⌂", "Dashboard", 0), Triple("⌕", "Radar", 1),
-                        Triple("◫", "Positionen", 2), Triple("⚙", "System", 3)).forEach { (icon, title, page) ->
+                    listOf(Triple("⌂", "Übersicht", 0), Triple("⌕", "Radar", 1),
+                        Triple("◈", "KI-Bot", 2), Triple("◫", "Trades", 3),
+                        Triple("⚙", "System", 4)).forEach { (icon, title, page) ->
                         NavigationBarItem(selected = s.activePage == page, onClick = { s.activePage = page },
                             icon = { Text(icon, fontSize = 22.sp) }, label = { Text(title, fontSize = 10.sp) },
                             colors = NavigationBarItemDefaults.colors(selectedIconColor = Violet,
@@ -88,7 +91,8 @@ private fun MemePulse(s: MemeStore) {
                 when (s.activePage) {
                     0 -> Dashboard(s)
                     1 -> Radar(s)
-                    2 -> Positions(s)
+                    2 -> BotScreen(s, onAutoConfirm = { showAutoConfirm = true })
+                    3 -> Positions(s)
                     else -> Settings(s, onAutoConfirm = { showAutoConfirm = true })
                 }
             }
@@ -180,7 +184,18 @@ private fun Dashboard(s: MemeStore) {
             Box(Modifier.weight(1f)) { Metric("WIN RATE", signed(s.winrate()).removePrefix("+"), White) }
             Box(Modifier.weight(1f)) { Metric("POSITIONEN", s.positions.size.toString() + " / 3", White) }
         }
-        SectionHeader("KI-Übersicht", "MANUELL / KONTROLLIERT")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(17.dp))
+                .clickable { s.activePage = 2 }.padding(16.dp)) {
+            Column {
+                Text("◈  GROK AUTOPILOT", color = White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(if (s.paperBotEnabled) "Paper-Agent handelt nach Risikoregeln"
+                    else "KI-Zentrale öffnen und Strategie testen", color = Muted, fontSize = 11.sp)
+            }
+            Text(if (s.paperBotEnabled) "● AKTIV" else "ÖFFNEN ›", color = if (s.paperBotEnabled) Green else Violet,
+                fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        }
+        SectionHeader("KI-Übersicht", "SIGNAL / RISIKO")
         Surface(color = Panel, shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text("◉ Grok-Analyse", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -278,6 +293,10 @@ private fun TokenCard(c: Coin, s: MemeStore, compact: Boolean) {
                 Caption("VOL  " + usd(c.volume), color = Muted)
                 Caption(c.score.toString() + "/100", color = if (c.score >= 75) Green else Violet)
             }
+            Box(Modifier.fillMaxWidth().height(5.dp).background(Panel2, RoundedCornerShape(6.dp))) {
+                Box(Modifier.fillMaxWidth((c.score.coerceIn(0, 100) / 100f)).fillMaxHeight()
+                    .background(Brush.horizontalGradient(listOf(Violet, Green)), RoundedCornerShape(6.dp)))
+            }
             if (!compact) {
                 Caption(if (c.live) "MARKT-SCORE ≠ RUGCHECK-AUDIT" else "SIMULIERTE MARKTDATEN", color = Muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -315,6 +334,28 @@ private fun Positions(s: MemeStore) {
                     }
                     Caption("Einstieg " + price(pos.entry) + " · Wert nach Kosten " + usd(value), color = Muted)
                     OutlinedButton(onClick = { s.paperSell(pos) }) { Text("Paper Sell 100 %") }
+                }
+            }
+        }
+        SectionHeader("Echte Wallet-Positionen", "SOLANA · BACKEND")
+        Text("Nicht Teil des simulierten Portfolios. Basis: bestätigte Swaps dieses Trading-Servers.",
+            color = Muted, fontSize = 11.sp)
+        OutlinedButton(onClick = { s.refreshRealPositions() }) { Text("Wallet-Positionen aktualisieren") }
+        s.realSolBalance?.let { Text("SOL-Guthaben: " + String.format(java.util.Locale.US, "%.5f SOL", it),
+            color = Green, fontWeight = FontWeight.Bold) }
+        if (s.realPositions.isEmpty()) Hint("Keine bestätigten Real-Positionen geladen oder Server nicht verbunden.")
+        s.realPositions.forEach { p ->
+            Surface(color = Panel, shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(p.optString("mint").take(17) + "…", color = White, fontWeight = FontWeight.Bold)
+                    p.optDouble("estimatedChangePct", Double.NaN).let {
+                        if (!it.isNaN()) Text("Geschätzte Kursänderung: " + signed(it),
+                            color = if (it >= 0) Green else Red)
+                    }
+                    Text("Keine verbindliche Verkaufskurs-Garantie", color = Muted, fontSize = 11.sp)
+                    OutlinedButton(onClick = { s.previewSell(p.optString("mint")) }) {
+                        Text("Verkauf 100 % vorbereiten", color = Red)
+                    }
                 }
             }
         }
