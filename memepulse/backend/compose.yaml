@@ -1,0 +1,23 @@
+# Isolated deployment. Add a separate HTTPS reverse proxy.
+services:
+  memepulse-api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8787"
+      TRADE_LOG_PATH: "/app/private/trades.json"
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - memepulse-state:/app/private
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  memepulse-state:
