@@ -5,6 +5,7 @@ import { Keypair, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { confirmedPositions, exitSignal, safetyStatus, shouldHaltForUnknown } from './botPolicy.mjs';
 import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
+import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
 const env = process.env;
@@ -31,6 +32,8 @@ const TAKE_PROFIT_PCT = Math.min(100, Math.max(5, Number(env.TAKE_PROFIT_PCT || 
 const MAX_PRICE_IMPACT_PCT = Math.min(5, Math.max(0.2, Number(env.MAX_PRICE_IMPACT_PCT || '2')));
 const MAX_SLIPPAGE_BPS = Math.min(200, Math.max(25, Number(env.MAX_SLIPPAGE_BPS || '100')));
 const CONTROL_MAX_AGE_MS = 30000;
+const AUTOPILOT_SESSION_HOURS = Math.min(24, Math.max(1, Number(env.AUTOPILOT_SESSION_HOURS || '24')));
+const MAX_HISTORY_SAMPLES = 25;
 if (!RPC.startsWith('https://')) throw Error('SOLANA_RPC_URL must be HTTPS');
 const signer = env.SOLANA_PRIVATE_KEY_B58 ? Keypair.fromSecretKey(bs58.decode(env.SOLANA_PRIVATE_KEY_B58)) : null;
 const address = signer?.publicKey.toBase58() || null;
@@ -53,6 +56,10 @@ let marketCache = { at: 0, tokens: [] };
 const prepared = new Map();
 const usedKeys = new Map();
 const cooldown = new Map();
+const snapshots = new Map();
+const peakByMint = new Map();
+const lastConfirmed = new Map();
+let lastStrategyHealth = null;
 
 function saveJournal() {
   fs.mkdirSync(new URL('.', 'file://' + (DATA_FILE.startsWith('/') ? DATA_FILE : process.cwd() + '/' + DATA_FILE)), { recursive: true, mode: 0o700 });
@@ -289,20 +296,29 @@ async function executeOrder(id, source) {
 // Local decision engine: never needs xAI, Grok, OpenAI or any external model key.
 async function scanAndExplain(mint) {
   const market = await marketFor(mint);
+  const now = Date.now();
+  if (market) snapshots.set(mint, appendSnapshot(snapshots.get(mint) || [], market, now).slice(-MAX_HISTORY_SAMPLES));
   const signal = analyzeMarket(market || { mint });
+  const confirmation = confirmHistory(snapshots.get(mint) || [], now);
   const marketReasons = marketRejectReasons(market, 75);
-  if (marketReasons.length || !signal.eligible) {
-    return { ...combineWithSecurity(signal, marketReasons), market, safety: null };
+  const observations = confirmation.passed ? [] : [confirmation.code];
+  if (marketReasons.length || !signal.eligible || !confirmation.passed) {
+    return { ...combineWithSecurity(signal, [...marketReasons, ...observations]), market,
+      safety: null, confirmation };
   }
   try {
     const safety = await rugReport(mint);
     const result = combineWithSecurity(signal, safety.reasons);
-    return { ...result, market, safety };
+    return { ...result, market, safety, confirmation };
   } catch (err) {
-    // Fail closed: no trading on API errors/unknown token permissions.
     return { ...combineWithSecurity(signal, ['TOKEN_SECURITY_UNAVAILABLE']), market,
-      safety: null, error: String(err.message).slice(0, 140) };
+      safety: null, confirmation, error: String(err.message).slice(0, 140) };
   }
+}
+function currentPerformance() {
+  const realized = confirmedPositions(journal).realized.map(x =>
+    ({ pnlSol: Number(BigInt(x.pnlSolAtomic)) / 1e9 })).slice(-200);
+  return strategyHealth(realized);
 }
 async function agentCycle() {
   if (!AUTO_ALLOWED || !LIVE || !activeUntil || Date.now() >= activeUntil) {
@@ -311,21 +327,26 @@ async function agentCycle() {
     return;
   }
   if (fs.existsSync(STOP_FILE)) { activeUntil = 0; agentEvent('STOPPED', 'STOP-Datei erkannt'); return; }
-  if (busy || Date.now() - lastAutoCycle < 90000) return;
+  if (busy || Date.now() - lastAutoCycle < 60000) return;
   lastAutoCycle = Date.now();
   const halt = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
   if (halt.halted) { activeUntil = 0; agentEvent('RISK_HALT', halt.reasons.join('; ')); return; }
 
-  // Exits take priority; LLM cannot override price-based loss/profit rules.
+  // Exit checks are deterministic, independent of positive engine signals.
   const holdings = confirmedPositions(journal).positions.filter(p => p.autoOwned);
   for (const p of holdings) {
     if (Date.now() - (lastExitAttempt.get(p.mint) || 0) < 120000) continue;
     try {
       const market = await marketFor(p.mint);
-      const exit = exitSignal(p.entryPriceUsd, market?.priceUsd, STOP_LOSS_PCT, TAKE_PROFIT_PCT);
-      lastAgentObservation = { at: Date.now(), mint: p.mint, action: exit ? exit.reason : 'MONITOR',
-        priceUsd: market?.priceUsd || null, entryPriceUsd: p.entryPriceUsd };
-      if (!exit) continue;
+      if (!market?.priceUsd) { agentEvent('EXIT_MONITOR_MISSING', p.mint.slice(0, 12)); return; }
+      const peak = Math.max(peakByMint.get(p.mint)||0, market.priceUsd, p.entryPriceUsd);
+      peakByMint.set(p.mint, peak);
+      const exit = evaluateExit({entryPriceUsd:p.entryPriceUsd,markPriceUsd:market.priceUsd,
+        peakPriceUsd:peak,buyAt:p.buyAt,stopLossPct:STOP_LOSS_PCT,takeProfitPct:TAKE_PROFIT_PCT});
+      lastAgentObservation = { at: Date.now(), mint: p.mint, action: exit.reason,
+        priceUsd: market.priceUsd, entryPriceUsd: p.entryPriceUsd,
+        peakPriceUsd:peak, changePct:exit.changePct };
+      if (!exit.sell) continue;
       lastExitAttempt.set(p.mint, Date.now());
       agentEvent('EXIT_TRIGGER', p.mint.slice(0, 12) + ': ' + exit.reason + ' ' + exit.changePct.toFixed(1) + '%');
       const order = await prepareOrder({ side: 'SELL', mint: p.mint, percent: 100 }, 'BOT_EXIT');
@@ -339,6 +360,13 @@ async function agentCycle() {
     }
   }
   if (holdings.length >= MAX_OPEN_POSITIONS) return;
+  lastStrategyHealth = currentPerformance();
+  if (lastStrategyHealth.halt) {
+    agentEvent('STRATEGY_HALT', 'Vergangene abgeschlossene Trades zeigen negative durchschnittliche Rendite');
+    activeUntil = 0;
+    return;
+  }
+  // One candidate at a time, limited to explicitly reviewed allowlist mints.
   for (const mint of ALLOWLIST) {
     if (Date.now() >= activeUntil || fs.existsSync(STOP_FILE)) return;
     if (cooldown.get(mint) && Date.now() - cooldown.get(mint) < 86400000) continue;
@@ -350,7 +378,16 @@ async function agentCycle() {
         confidence: result.confidence || 0, reason: result.reason, eligible: !!result.eligible };
       agentEvent(result.eligible ? 'BUY_SIGNAL' : 'HOLD_SIGNAL', mint.slice(0, 12) + ' · ' + (result.reason || 'Kein Signal'));
       if (!result.eligible) continue;
-      const preview = await prepareOrder({ side: 'BUY', mint, amountSol: Number(MAX_TRADE) / 1e9 }, 'ENGINE');
+      const availableWallet = await balanceSol();
+      const amount = sizeBuy({walletLamports:availableWallet,reserveLamports:RESERVE,
+        maxTradeLamports:MAX_TRADE,dailyRemainingLamports:dailyRemaining(journal,MAX_DAILY),
+        riskBudgetBps:50,stopLossPct:STOP_LOSS_PCT});
+      if (amount.amountLamports <= 0n) {
+        agentEvent('FUNDS_LIMIT', amount.reason);
+        return;
+      }
+      const preview = await prepareOrder({ side: 'BUY', mint,
+        amountSol:Number(amount.amountLamports)/1e9 }, 'ENGINE');
       if (Date.now() >= activeUntil || fs.existsSync(STOP_FILE)) return;
       await executeOrder(preview.previewId, 'ENGINE');
       return; // Only one transaction per cycle.
@@ -361,7 +398,7 @@ async function agentCycle() {
   }
 }
 
-setInterval(() => { if (activeUntil) agentCycle().catch(err => console.error('Agent:', err.message)); }, 90000).unref();
+setInterval(() => { if (activeUntil) agentCycle().catch(err => console.error('Agent:', err.message)); }, 60000).unref();
 const server = http.createServer(async (req, res) => {
   if (req.url === '/health' && req.method === 'GET') return reply(res, 200, { ok: true, name: 'MemePulse API', realTradesEnabled: LIVE });
   if (!authenticated(req)) return reply(res, 401, { error: 'Bearer-Authentifizierung erforderlich' });
@@ -369,9 +406,11 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'GET' && url.pathname === '/api/status') return reply(res, 200, {
       live: LIVE, autoAllowed: AUTO_ALLOWED, autoActive: activeUntil > Date.now(), autoExpiresAt: activeUntil || null,
-      engineConnected: true, strategyName: 'MemePulse Quant v1', engineVersion: 'memepulse-quant-v1', wallet: address, whitelistedMints: [...ALLOWLIST],
+      engineConnected: true, strategyName: 'MemePulse Quant v1', engineVersion: 'memepulse-quant-v1-autopilot2', wallet: address, whitelistedMints: [...ALLOWLIST],
       maxTradeSol: Number(MAX_TRADE) / 1e9, maxDailySpendSol: Number(MAX_DAILY) / 1e9,
       maxOrdersPerDay: MAX_ORDERS, maxOpenPositions: MAX_OPEN_POSITIONS,
+      positionSizing: 'max 2% of wallet liquidity, 0.5% SOL stop-equivalent loss budget',
+      sessionHours: AUTOPILOT_SESSION_HOURS, strategyHealth: currentPerformance(),
       stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
       maxDailyRealizedLossSol: MAX_REALIZED_LOSS_SOL,
       risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL), stopped: fs.existsSync(STOP_FILE),
@@ -384,6 +423,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/agent') return reply(res, 200, {
       active: Date.now() < activeUntil && !fs.existsSync(STOP_FILE),
       expiresAt: activeUntil || null, lastObservation: lastAgentObservation,
+      performance: currentPerformance(), historyTracked: snapshots.size,
       lastError: lastAgentError, events: agentEvents,
       limits: { stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
         maxDailyRealizedLossSol: MAX_REALIZED_LOSS_SOL, maxOpenPositions: MAX_OPEN_POSITIONS },
@@ -403,6 +443,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/wallet') return reply(res, 200, {
       address, balanceSol: signer ? Number(await balanceSol()) / 1e9 : null
+    });
+    if (req.method === 'GET' && url.pathname === '/api/deposit') return reply(res, 200, {
+      network: 'Solana mainnet', asset: 'SOL', address,
+      balanceSol: signer ? Number(await balanceSol()) / 1e9 : null,
+      ready: !!(signer && LIVE), autonomousArmed: activeUntil>Date.now(),
+      instructions:'Deposit only native SOL to your separately created dedicated wallet after verifying the address. Funding never authorizes trading.'
     });
     if (req.method !== 'POST') return reply(res, 404, { error: 'Route nicht gefunden' });
     const body = await readBody(req);
@@ -424,10 +470,10 @@ const server = http.createServer(async (req, res) => {
       if (safety.halted) throw Error('Bot wegen Risikostopp blockiert: ' + safety.reasons.join('; '));
       if (fs.existsSync(STOP_FILE)) throw Error('STOP-Datei blockiert den Bot');
       if (body.confirm !== 'ACTIVATE AUTOMATIC LIVE TRADING') throw Error('Autonome Bestätigung fehlt');
-      activeUntil = Date.now() + 30 * 60 * 1000; // User must renew; never persists across restarts.
-      agentEvent('ACTIVATED', 'Benutzer aktivierte eine 30-Minuten-Session');
+      activeUntil = Date.now() + AUTOPILOT_SESSION_HOURS * 3600_000; // Always explicit and never persists across restart.
+      agentEvent('ACTIVATED', 'Benutzer aktivierte eine ' + AUTOPILOT_SESSION_HOURS + '-Stunden-Session');
       setImmediate(() => agentCycle().catch(e => { lastAgentError = e.message; agentEvent('ERROR', e.message); }));
-      return reply(res, 200, { active: true, expiresAt: activeUntil, note: 'Auto-Käufe nur aus Allowlist und innerhalb Limits' });
+      return reply(res, 200, { active: true, expiresAt: activeUntil, note: 'Autopilot startet nur nach ausdrücklicher Freigabe. Käufe nur aus Allowlist und innerhalb Limits.' });
     }
     if (url.pathname === '/api/agent/stop') {
       activeUntil = 0;
