@@ -412,7 +412,18 @@ class MemeStore(context: Context) {
             }
         }
         if (sold || positions.size >= 3 || cash < equity() * .005) return
-        val candidates = coins.filter { it.live && it.score >= 85 && positions.none { p -> p.mint == it.mint } }
+        val today = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        if (fills.count { it.side == "BUY" && it.at >= today } >= 3) {
+            paperLog("Tageslimit erreicht: maximal 3 Paper-Käufe")
+            return
+        }
+        val recentlyBought = fills.filter { it.side == "BUY" && it.at >= System.currentTimeMillis() - 86400000 }
+            .map { it.symbol }.toSet()
+        val candidates = coins.filter { it.live && it.score >= 85 &&
+            it.symbol !in recentlyBought && positions.none { p -> p.mint == it.mint } }
             .sortedByDescending { it.score }.take(4)
         if (candidates.isEmpty()) { paperLog("HOLD · keine Coins über der Sicherheitsschwelle"); return }
         paperBotWorking = true
