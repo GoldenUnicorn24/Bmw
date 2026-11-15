@@ -67,6 +67,16 @@ private fun MemePulse(s: MemeStore) {
             if (s.activePage == 0 || s.activePage == 1) s.simulateDemoTick()
         }
     }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(45000)
+            if (s.paperAutoEnabled) {
+                s.paperAutoTick()
+                if (!s.marketLoading) s.refreshMarket()
+            }
+            if (s.serverStatus != null) s.refreshLiveStatus()
+        }
+    }
     MaterialTheme(colorScheme = scheme) {
         Scaffold(
             containerColor = Background,
@@ -86,7 +96,7 @@ private fun MemePulse(s: MemeStore) {
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when (s.activePage) {
-                    0 -> Dashboard(s)
+                    0 -> Dashboard(s, onAutoConfirm = { showAutoConfirm = true })
                     1 -> Radar(s)
                     2 -> Positions(s)
                     else -> Settings(s, onAutoConfirm = { showAutoConfirm = true })
@@ -151,9 +161,13 @@ private fun Header(s: MemeStore) {
     }
 }
 @Composable
-private fun Dashboard(s: MemeStore) {
+private fun Dashboard(s: MemeStore, onAutoConfirm: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        StatusRibbons(s)
+        AgentCommandCenter(s, onAutoConfirm)
+        if (s.serverStatus != null) LiveWalletPanel(s)
+        SectionHeader("Paper Performance", "BACKTEST / SIMULATION")
         Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF2B2344), Panel)), RoundedCornerShape(22.dp))
             .border(1.dp, Color(0xFF50426C), RoundedCornerShape(22.dp)).padding(20.dp)) {
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -180,17 +194,7 @@ private fun Dashboard(s: MemeStore) {
             Box(Modifier.weight(1f)) { Metric("WIN RATE", signed(s.winrate()).removePrefix("+"), White) }
             Box(Modifier.weight(1f)) { Metric("POSITIONEN", s.positions.size.toString() + " / 3", White) }
         }
-        SectionHeader("KI-Übersicht", "MANUELL / KONTROLLIERT")
-        Surface(color = Panel, shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("◉ Grok-Analyse", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text("Die KI bewertet ausgewählte Coins. Die Entscheidung zum Kauf muss zusätzlich sämtliche Sicherheits- und Einsatzregeln bestehen.", color = Muted, fontSize = 12.sp)
-                Text(if (s.serverStatus?.optBoolean("grokConnected") == true) "● GROK API VERBUNDEN" else "○ GROK NICHT VERBUNDEN",
-                    color = if (s.serverStatus?.optBoolean("grokConnected") == true) Green else Violet, fontSize = 11.sp)
-                Text(if (s.serverStatus?.optBoolean("autoActive") == true) "AUTO LIVE: AKTIV" else "AUTO LIVE: AUS",
-                    color = if (s.serverStatus?.optBoolean("autoActive") == true) Red else Muted, fontSize = 11.sp)
-            }
-        }
+        PaperAutomationPanel(s)
         SectionHeader("Market Radar", if (s.realMarket) "DEX SCREENER · PROMOTED FEED" else "DEMO")
         s.coins.sortedByDescending { it.score }.take(5).forEach { TokenCard(it, s, compact = true) }
         Button(onClick = { s.activePage = 1 }, modifier = Modifier.fillMaxWidth(),
@@ -299,6 +303,10 @@ private fun TokenCard(c: Coin, s: MemeStore, compact: Boolean) {
 private fun Positions(s: MemeStore) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader("Echtgeld-Wallet", "SOLANA · SERVER")
+        LiveWalletPanel(s)
+        SectionHeader("Echte Positionen", "AUS BESTÄTIGTEN SWAPS")
+        LivePositionsPanel(s)
         SectionHeader("Paper-Portfolio", s.positions.size.toString() + " OFFENE POSITIONEN")
         Text("Papier-Guthaben: " + usd(s.cash) + " · simulierte Kosten: 0,8 % je Seite", color = Muted, fontSize = 12.sp)
         if (s.positions.isEmpty()) Hint("Noch keine Paper-Positionen. Öffne den Token-Radar.")
@@ -333,6 +341,8 @@ private fun Positions(s: MemeStore) {
                 }
             }
         }
+        SectionHeader("KI-Entscheidungen", "BOT ACTIVITY")
+        BotHistory(s)
         SectionHeader("Paper-Journal", s.fills.size.toString() + " ORDERS")
         s.fills.take(30).forEach { f ->
             Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(12.dp)).padding(12.dp),
@@ -349,6 +359,8 @@ private fun Positions(s: MemeStore) {
 private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        StatusRibbons(s)
+        PaperAutomationPanel(s)
         SectionHeader("Trading Modus", "DEFAULT: PAPER")
         Surface(color = Panel, shape = RoundedCornerShape(17.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
