@@ -244,7 +244,7 @@ async function prepareOrder(body, source = 'MANUAL') {
   // Reject unsupported, multisigner and opaque program-ID transactions BEFORE
   // creating a quote. This checks the envelope, not the audited swap semantics.
   const unsignedTx = VersionedTransaction.deserialize(Buffer.from(quote.transaction, 'base64'));
-  inspectSwapTransaction(unsignedTx, signer.publicKey);
+  inspectSwapTransaction(unsignedTx, signer.publicKey, {side,mint,amountLamports:String(amount)});
   if (Number.isFinite(Number(quote.priceImpactPct)) && quote.priceImpactPct !== null &&
     Math.abs(Number(quote.priceImpactPct)) > MAX_PRICE_IMPACT_PCT)
     throw Error('Jupiter-Preiswirkung oberhalb der Risikogrenze');
@@ -291,7 +291,7 @@ async function executeOrder(id, source) {
   // No journal entry if a route fails local structural validation; no transfer
   // could have been signed or sent at this point.
   const tx = VersionedTransaction.deserialize(Buffer.from(order.transaction, 'base64'));
-  const inspected = inspectSwapTransaction(tx, signer.publicKey);
+  const inspected = inspectSwapTransaction(tx, signer.publicKey, order);
   if (!inspected?.payer) throw Error('Unverified Jupiter route');
   tx.sign([signer]); // The only permitted signer; secret never leaves backend.
   const signed = Buffer.from(tx.serialize()).toString('base64');
