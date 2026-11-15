@@ -176,6 +176,9 @@ function assertCanTrade() {
   if (withdrawalSvc.uncertain()) throw Error('Withdrawal requires manual blockchain reconciliation');
   if (!LIVE) throw Error('Echtgeldhandel ist serverseitig deaktiviert');
   if (!signer) throw Error('Kein Trading-Wallet auf dem Server');
+  if (shouldHaltForUnknown(journal)) throw Error('Ungeklärte Blockchain-Ausführung; keine weitere Signatur zulässig');
+  if (journal.some(t=>t.status==='SUCCESS' && t.rpcReceiptChecked !== true))
+    throw Error('Alte Transaktionsdaten ohne unabhängigen RPC-Beleg: manuelle Ledger-Prüfung nötig');
   if (fs.existsSync(STOP_FILE)) throw Error('STOP-Datei vorhanden: alle Trades gesperrt');
   if (busy) throw Error('Ein Trade wird bereits ausgeführt');
 }
