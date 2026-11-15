@@ -163,7 +163,9 @@ async function prepareOrder(body, source = 'MANUAL') {
     const pct = Number(body.percent);
     if (!Number.isFinite(pct) || pct < 1 || pct > 100) throw Error('Verkaufsanteil muss zwischen 1 und 100 liegen');
     const holdings = await tokenBalance(mint);
-    amount = holdings * BigInt(Math.floor(pct * 100)) / 10000n;
+    const available = source === 'GROK_EXIT' ?
+      BigInt(confirmedPositions(journal).positions.find(p => p.mint === mint && p.autoOwned)?.tokenAtomic || '0') : holdings;
+    amount = (holdings < available ? holdings : available) * BigInt(Math.floor(pct * 100)) / 10000n;
   }
   const balance = await balanceSol();
   const reasons = tradeRejectReasons({
@@ -174,6 +176,15 @@ async function prepareOrder(body, source = 'MANUAL') {
   let market = null;
   let safety = null;
   if (side === 'BUY') {
+    const halt = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
+    reasons.push(...halt.reasons);
+    if (confirmedPositions(journal).positions.length >= MAX_OPEN_POSITIONS)
+      reasons.push('Maximale Anzahl offener Wallet-Positionen erreicht');
+    if (confirmedPositions(journal).positions.some(p => p.mint === mint))
+      reasons.push('Token ist bereits in der Wallet-Positionenliste');
+    if (journal.some(t => t.side === 'BUY' && t.mint === mint && t.at > Date.now() - 86400000 &&
+      ['SUBMITTED', 'SUCCESS', 'UNKNOWN'].includes(t.status)))
+      reasons.push('Token wurde bereits in den letzten 24 Stunden gekauft');
     market = await marketFor(mint);
     reasons.push(...marketRejectReasons(market, 75));
     safety = await rugReport(mint);
@@ -190,6 +201,11 @@ async function prepareOrder(body, source = 'MANUAL') {
   const quote = await jsonFetch('https://api.jup.ag/swap/v2/order?' + params,
     { headers: { 'x-api-key': JUPITER_KEY } });
   if (!quote.transaction || !quote.requestId || !quote.outAmount) throw Error('Jupiter hat keine handelbare Route geliefert');
+  if (Number.isFinite(Number(quote.priceImpactPct)) && quote.priceImpactPct !== null &&
+    Math.abs(Number(quote.priceImpactPct)) > MAX_PRICE_IMPACT_PCT)
+    throw Error('Jupiter-Preiswirkung oberhalb der Risikogrenze');
+  if (quote.transactionVersion && Number(quote.transactionVersion) > 0)
+    throw Error('Transaktionsversion nicht vom Server unterstützt');
   if (quote.inAmount && BigInt(quote.inAmount) !== amount) throw Error('Quote-Einsatz stimmt nicht überein');
   if (BigInt(quote.outAmount) <= 0n) throw Error('Quote hat keinen Auszahlungsbetrag');
   const id = crypto.randomUUID();
@@ -202,6 +218,7 @@ async function prepareOrder(body, source = 'MANUAL') {
   return { previewId: id, side, mint, inputAtomic: String(amount), outputAtomic: quote.outAmount,
     router: quote.router || 'Jupiter', estimatedPriceUsd: market?.priceUsd ?? null,
     feeBps: quote.feeBps ?? null, slippageBps: MAX_SLIPPAGE_BPS,
+    priceImpactPct: quote.priceImpactPct ?? null,
     expiresAt: order.created + CONTROL_MAX_AGE_MS, wallet: address, source, safety };
 }
 async function executeOrder(id, source) {
@@ -216,15 +233,23 @@ async function executeOrder(id, source) {
     allowlist: ALLOWLIST, maxTradeLamports: MAX_TRADE, maxDailyLamports: MAX_DAILY,
     journal, currentBalanceLamports: balance, reserveLamports: RESERVE, maxOrdersPerDay: MAX_ORDERS
   });
+  if (order.side === 'BUY') reasons.push(...safetyStatus(journal, MAX_REALIZED_LOSS_SOL).reasons);
+  if (order.side === 'BUY' && confirmedPositions(journal).positions.length >= MAX_OPEN_POSITIONS)
+    reasons.push('Maximale Positionsanzahl erreicht');
+  if (order.side === 'BUY' && confirmedPositions(journal).positions.some(p => p.mint === order.mint))
+    reasons.push('Token bereits gehalten');
   if (reasons.length) throw Error('Trade wegen Limit gestoppt: ' + reasons.join('; '));
   busy = true;
   const entry = { id, at: Date.now(), side: order.side, mint: order.mint,
     amountLamports: order.amountLamports, estimatedOutputAtomic: order.estimatedOutputAtomic,
+    entryPriceUsd: order.market?.priceUsd ?? null,
     source, status: 'SUBMITTED', signature: null };
   journal.push(entry);
   saveJournal(); // Block duplicate spending BEFORE broadcasting.
   try {
     const tx = VersionedTransaction.deserialize(Buffer.from(order.transaction, 'base64'));
+    if (!tx.message.staticAccountKeys.some(k => k.equals(signer.publicKey)))
+      throw Error('Signer nicht in der Jupiter-Transaktion gefunden');
     tx.sign([signer]); // Secret remains on backend only.
     const signed = Buffer.from(tx.serialize()).toString('base64');
     const result = await jsonFetch('https://api.jup.ag/swap/v2/execute', {
@@ -237,6 +262,7 @@ async function executeOrder(id, source) {
     entry.status = result.status === 'Success' ? 'SUCCESS' : 'FAILED';
     entry.error = result.status === 'Success' ? null : String(result.error || result.code || 'Jupiter-Ausführung fehlgeschlagen');
     if (entry.status === 'SUCCESS' && order.side === 'BUY') cooldown.set(order.mint, Date.now());
+    if (entry.status === 'SUCCESS') agentEvent('EXECUTION_' + order.side, order.mint.slice(0, 12) + ' · ' + source);
     saveJournal();
     return { id, status: entry.status, signature: entry.signature, error: entry.error || null };
   } catch (err) {
