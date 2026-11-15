@@ -146,7 +146,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                         else health.optString("status", "Noch keine Daten"),
                         if (health.optBoolean("halt", false)) danger else secondary)
                 }
-                Text("Zuerst mehrere Kursbeobachtungen, Liquiditätskontrolle und Risikobudget. Exits sind zeitlich begrenzt; nach Sessionende keine Verkaufsüberwachung. Nicht für unbeaufsichtigten Echtgeldbetrieb auditiert.",
+                Text("Zuerst mehrere Kursbeobachtungen, Liquiditätskontrolle und Risikobudget. Exits sind zeitlich begrenzt; nach Sessionende bis zu 2 Stunden Exit-Only-Prüfung; danach keine laufende Überwachung. Nicht für unbeaufsichtigten Echtgeldbetrieb auditiert.",
                     color = secondary, fontSize = 11.sp, lineHeight = 16.sp)
                 Button(onClick = onAutoConfirm, enabled = autoAllowed && live && engineReady && !auto && !s.requesting,
                     modifier = Modifier.fillMaxWidth().height(47.dp),
