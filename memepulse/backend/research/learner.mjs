@@ -61,14 +61,14 @@ export function fitLogistic(rows,{epochs=300,learningRate=.12,l2=.025}={}){
       if(!finite(weights[k]))throw Error('Numerical training failure');
     }
   }
-  return {version:'memepulse-ohlcv-logit-v1',features:FEATURE_NAMES,
+  return {version:'memepulse-meme-stoplogit-v2',features:FEATURE_NAMES,
     means:mu,scales:sd,weights,bias,threshold:probThreshold,
     trainedExamples:rows.length,positiveLabelRate:avg,frictionPct:FRICTION_PCT,
     horizonMinutes:HORIZON_CANDLES*5, trainedAt:new Date().toISOString()};
 }
 export function predict(model,features){
   if(!model || !Array.isArray(features) || features.length!==FEATURE_NAMES.length ||
-     features.some(x=>!finite(x)) || model.version!=='memepulse-ohlcv-logit-v1'||
+     features.some(x=>!finite(x)) || model.version!=='memepulse-meme-stoplogit-v2'||
      model.weights?.length!==FEATURE_NAMES.length ||
      model.features?.join('|')!==FEATURE_NAMES.join('|'))return null;
   const normalized=features.map((v,i)=>(v-model.means[i])/model.scales[i]);
@@ -113,9 +113,9 @@ export function trainResearch(examples, provenance={}){
     metrics:{training:evaluate(model,parts.train),chronological,unseenPools},
     provenance,
     warnings:[
-      'Trading costs are estimates, not executable historical Jupiter quotes',
+      'Stop/take-profit candle labels with 3% costs are approximations, not executable Jupiter quotes',
       'Trending-pool selection has survivorship and promotional-selection bias',
-      'OHLCV excludes intrabar execution path, spread, network gas, rug exits and honeypots',
+      'OHLCV cannot establish intrabar stop/take order, network gas, rug exits, MEV or honeypots',
       'Model was not verified with real trades and cannot authorize live swaps'
     ]};
 }
