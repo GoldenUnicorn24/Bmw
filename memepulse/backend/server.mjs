@@ -8,8 +8,8 @@ import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
 import { researchStatus } from './research/status.mjs';
 import { separateMarketReports } from './research/market-status.mjs';
 import {createWithdrawalService,SOL_MAINNET_GENESIS} from './withdrawal.mjs';
-import {inspectSwapTransaction,checkJupiterExecution,verifySwapChainReceipt,
-  waitForConfirmedReceipt} from './swapGuard.mjs';
+import {inspectSwapTransaction,validateSwapSimulation,checkJupiterExecution,
+  verifySwapChainReceipt,waitForConfirmedReceipt} from './swapGuard.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -296,10 +296,18 @@ async function executeOrder(id, source) {
   tx.sign([signer]); // The only permitted signer; secret never leaves backend.
   const signed = Buffer.from(tx.serialize()).toString('base64');
   const localSignature = bs58.encode(Buffer.from(tx.signatures[0]));
+  // A simulation may reject a legitimate route; in that case, do NOT broadcast.
+  // We never weaken this preflight for trade convenience.
+  const simulated = await rpc('simulateTransaction',[signed,{
+    encoding:'base64',commitment:'processed',sigVerify:true,replaceRecentBlockhash:false
+  }]);
+  const simulation=validateSwapSimulation(simulated);
+  if(Date.now()-order.created>CONTROL_MAX_AGE_MS)
+    throw Error('Quote expired during simulation; request a fresh quote');
   const entry = { id, at: Date.now(), side: order.side, mint: order.mint,
     amountLamports: order.amountLamports, estimatedOutputAtomic: order.estimatedOutputAtomic,
     entryPriceUsd: order.market?.priceUsd ?? null, source, status: 'SUBMITTED',
-    signature: localSignature, envelope: inspected, rpcReceiptChecked: false };
+    signature: localSignature, envelope: inspected, simulation, rpcReceiptChecked: false };
   journal.push(entry);
   saveJournal(); // Persistent unknown-risk lock BEFORE any broadcast.
   try {
