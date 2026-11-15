@@ -106,3 +106,17 @@ test('synthetic Jupiter quote with unreviewed program fails before journal/signa
    assert.equal(trades.body.trades.length,0);
  }finally{await clean(ctx);}
 });
+
+test('production readiness is never fabricated from successful synthetic transaction tests',async()=>{
+ const ctx=await launch();
+ try{
+   const res=await call(ctx.base,'/api/readiness');
+   assert.equal(res.status,200,JSON.stringify(res.body));
+   assert.equal(res.body.network,'MAINNET_VERIFIED'); // mocked genesis, no real chain
+   assert.equal(res.body.productionReady,false);
+   assert.equal(res.body.receivingDepositsRecommended,false);
+   assert.ok(res.body.checks.some(x=>x.key==='audit'&&x.passed===false));
+   assert.ok(res.body.checks.some(x=>x.key==='live_e2e'&&x.passed===false));
+   assert.ok(res.body.checkCount>=10);
+ }finally{await clean(ctx);}
+});
