@@ -1,53 +1,87 @@
-# MemePulse AI v0.3 – App installieren und Grok-Trading einrichten
+# MemePulse AI v0.4 – Android installieren und handeln
 
-## 1. Android App installieren
-1. Github -> GoldenUnicorn24/Bmw -> Actions -> **MemePulse AI - Android APK**.
-2. Einen **erfolgreichen** Lauf auf Branch **feature/memepulse-v03-pro-trader** öffnen.
-3. Artifacts -> **MemePulseAI-Android-v0.3-debug-APK** herunterladen, ZIP entpacken und APK installieren.
-4. Erster Start: **PAPER** und frei erfundene Demo-Coins. Im Radar auf **Live-Kurse abrufen** tippen.
-5. Manuelle Paper-Käufe/Verkäufe funktionieren ohne Wallet und ohne Backend.
+**Keine Grok- oder sonstige KI-Modell-API erforderlich.** Die integrierte Quant Engine 1.0 ist ein von uns programmiertes, transparentes Regelwerk und kein trainiertes neuronales Modell. Es garantiert keine Gewinne. Die App enthält keine vorkonfigurierte Wallet und keinen laufenden Server.
 
-**Achtung:** Der DEX-Screener-Feed besteht aus bezahlten/optimierten Profilen. Die Liste ist keine objektive Markt-Bestenliste. Es gibt keine Gewinngarantie.
+## 1. Android APK installieren
+1. Öffne https://github.com/GoldenUnicorn24/Bmw/actions
+2. Wähle den Workflow **MemePulse AI - Android APK**.
+3. Öffne den neuesten erfolgreichen Lauf vom Branch **feature/memepulse-v04-native-ai**.
+4. Unter **Artifacts** lade **MemePulseAI-Android-v0.4-debug-APK** herunter. ZIP entpacken und die APK installieren.
+5. Beim ersten Start ist **Simulation AUS**. Du siehst den echten SOLANA-Markt. Ist noch keine Wallet verbunden, steht dort bewusst kein erfundenes Guthaben.
+6. Unter **Radar → Live-Kurse abrufen** aktualisierst du die Daten. Wähle einen Coin und tippe **Signal prüfen**. Die App analysiert direkt auf dem Handy 5m-/1h-/6h-Trends, Kaufdruck, Liquidität, Volumen sowie den verfügbaren RugCheck-Bericht.
 
-## 2. Grok-Paper-Bot verwenden (ohne Echtgeld)
-Der Paper-Bot handelt nur dann automatisch, wenn die xAI-API verbunden ist und eine Token-Prüfung durch den separaten Server erfolgreich war. Ohne Grok gibt es bewusst keine erfundenen "KI-Kaufsignale".
+Ein positives Signal ist keine Kauf- oder Gewinngarantie. Die angezeigte Signalstärke ist **keine** statistische Erfolgswahrscheinlichkeit. Der DEX-Screener-Feed enthält auch beworbene Tokens.
 
-Voraussetzungen: Node 22+ oder Docker, xAI API-Key, HTTPS-Server oder VPN, eigenes starkes API-Bearer-Token von mindestens 32 zufälligen Zeichen.
+## 2. Simulation: NUR unter Einstellungen aktivieren
+1. **Einstellungen → Simulationsmodus** einschalten. Der Schalter ist beim ersten Start **AUS**.
+2. Jetzt erscheint das fiktive Testkonto mit 1.000 USD Startkapital, Paper-Portfolio und Paper-Historie.
+3. **KI-Bot → Paper-Bot starten**. Keine Wallet, kein xAI-Schlüssel und kein Grok nötig.
+4. Der Bot nutzt aktuelle reale Kursdaten und simuliert Käufe nach internem Quant-Signal und RugCheck (wenn RugCheck nicht verfügbar ist, kauft er nicht). Maximal 1 % simuliertes Guthaben je Kauf, drei Käufe pro Tag, drei gleichzeitig offene Positionen. Kursbasierte Ausstiegsregeln bei −12 % bzw. +25 %.
+5. Bei **Einstellungen → Simulationsmodus AUS** stoppt der Paper-Bot, und die App zeigt wieder nur die reale Oberfläche. Die Einstellung bleibt gespeichert.
+
+Die Simulation läuft nur solange die App aktiv ist. Preise, Slippage und Verfügbarkeit echter Swaps sind nicht garantiert.
+
+## 3. Echtgeld: Eigener Server, eigene Wallet
+Die Echtgeld-Oberfläche ist standardmäßig sichtbar, **aber der Server sperrt Transaktionen bis zur ausdrücklichen Freigabe**.
+
+Benötigt wird:
+- Ein eigener sicher betriebener Server (Node.js 22+ oder Docker) und ein HTTPS Reverse Proxy mit VPN/IP-Zugriffsgrenze.
+- Eine **neue separate Solana-Hot-Wallet** mit sehr wenig Testkapital, niemals deine Haupt-Wallet.
+- Jupiter API-Key: https://developers.jup.ag/portal
+- Solana HTTPS RPC-Anbieter.
+- Ein zufällig generierter API_BEARER_TOKEN mit mindestens 32 Zeichen.
+- Eine von dir geprüfte Token-Mint-Allowlist (TRADING_ALLOWLIST). Nur diese Token darf der Bot real kaufen.
+
+Auf dem Server:
 
     cd memepulse/backend
     cp .env.example .env
-
-Trage API_BEARER_TOKEN und XAI_API_KEY in die lokale, private .env ein. Lasse ENABLE_LIVE_TRADES=NO stehen. Für Paper-KI brauchst du **keinen** Wallet-Private-Key.
-
-Mit Docker:
-
-    docker compose up -d --build
-
-Der API-Server lauscht nur an 127.0.0.1 des Hosts. Für Android ist ein sicherer HTTPS-Reverse-Proxy nötig (z.B. Caddy hinter VPN oder mit Zugriffsschutz). **Port 8787 niemals ungeschützt öffentlich freigeben.** Alternativ Node starten:
-
+    # Die private .env konfigurieren, niemals in GitHub hochladen
     npm install
     npm test
     npm start
 
-In der Android-App: **System -> HTTPS-Adresse und API-Token -> Verbindung prüfen**. Danach **Radar -> Live-Kurse -> KI-Bot -> KI-Paper-Bot starten**.
+Oder:
 
-Die Paper-KI läuft nur während die App ausgeführt wird. Neue simulierte Positionen brauchen ein positives Grok-Signal, aktuelle Kurse und serverseitigen RugCheck. Pro Kauf maximal 1% des simulierten Kapitals, bis zu 3 Positionen, Stop-Loss bei -12%, Take-Profit bei +25%, angenommene 0,8% Kosten pro Handelsseite. Paper-Performance ist keine Vorhersage von Echtgeld-Performance.
+    docker compose up -d --build
 
-## 3. Echte Trades (risikoreich, noch nicht auditiert)
-Das Backend enthält Jupiter-Swap-Endpunkte für Solana. Echte Trades sind **ab Werk gesperrt**.
+Der Standardserver bindet an 127.0.0.1:8787, Docker veröffentlicht ebenfalls nur localhost. **Nicht ungeschützt ins Internet stellen.** Für das Smartphone HTTPS hinter Reverse Proxy oder VPN einrichten.
 
-Du benötigst gesondert eine neue isolierte, niedrig finanzierte Hot Wallet und nur auf dem Server gespeicherte Secrets, Jupiter API-Key, Solana HTTPS-RPC, explizit geprüfte Mint-Adressen in TRADING_ALLOWLIST und den konfigurierten ENABLE_LIVE_TRADES-Wert YES_I_ACCEPT_REAL_LOSSES.
+Serverseitig private Variablen:
 
-In der App: System -> Real-Modus, im Radar Coin wählen -> Echtgeld-Vorschau -> jedes manuelle Swap bestätigen.
+    API_BEARER_TOKEN=<zufällige Zeichenfolge mit mindestens 32 Zeichen>
+    SOLANA_PRIVATE_KEY_B58=<Private Key deiner separaten Hot Wallet>
+    SOLANA_RPC_URL=https://<dein-RPC-Anbieter>
+    JUPITER_API_KEY=<dein Jupiter-Key>
+    TRADING_ALLOWLIST=<manuell geprüfte Mint-Adresse(n)>
+    MAX_TRADE_SOL=0.01
+    MAX_DAILY_SPEND_SOL=0.05
+    MIN_SOL_RESERVE=0.02
+    MAX_ORDERS_PER_DAY=3
+    ENABLE_LIVE_TRADES=YES_I_ACCEPT_REAL_LOSSES
 
-Der autonome Echtgeld-Bot muss zusätzlich auf dem Server ausdrücklich mit ALLOW_AUTONOMOUS_LIVE=YES_I_ACCEPT_AUTONOMOUS_LOSSES freigeschaltet und in der App für eine 30-Minuten-Sitzung bestätigt werden. Er führt während dieser Sitzung bei freigegebenen Coins nur dann Orders aus, wenn Grok und feste Sicherheits-/Risikoregeln sie zulassen.
+Das ist ein Konfigurationsbeispiel. **Private Wallet-Keys nie im Chat, in Screenshots, TikToks, Claude oder GitHub eintragen.** Die Beta ist noch nicht unabhängig auditiert. Vor einer echten Transaktion ist ein vollständiger Sicherheits- und End-to-End-Test notwendig. Falsche Konfiguration, manipulierte Swaps und Serverausfälle können Totalverlust verursachen.
 
-**Die Implementierung ist eine Entwickler-Beta, nicht geprüft oder für echtes Kapital freigegeben.** Das System besitzt keine garantierten, dauerhaft auf der Blockchain liegenden Stop-Loss-Orders. Nach Ende der Sitzung erfolgen keine automatischen Verkäufe. Server, RPC, Kurse, RugCheck, Jupiter und Grok können ausfallen. Auch ein kleiner Testbetrag kann vollständig verloren gehen. Keine Konten, Key-Phrasen oder Passwörter in ChatGPT, Claude, Screenshots oder GitHub veröffentlichen.
+Android: **Einstellungen → Backend verbinden**. Deine HTTPS-Adresse und den Bearer-Token eingeben, **Verbindung prüfen**. Der Token bleibt nur im Arbeitsspeicher. Im Radar einen Token wählen → **REAL Vorschau** → Quote prüfen → echten Trade ausdrücklich bestätigen.
 
-## 4. Sicherheit und Not-Aus
-- Keine privaten Schlüssel im Android-Client. Die App speichert den API-Token nur im Arbeitsspeicher.
-- Der HTTP-Server darf **niemals direkt** aus dem offenen Internet erreichbar sein.
-- Ein Stop über die App unter **KI-Bot -> NOT-AUS** stoppt weitere KI-Orders. Eine bereits eingereichte Blockchain-Transaktion ist nicht widerrufbar.
-- Im Container kann die permanente STOP-Sperre durch Anlegen von /app/private/STOP aktiviert werden. Einen laufenden Container kannst du zusätzlich mit **docker compose stop** anhalten. Bei bereits offenem Tokenbestand schützt das aber nicht vor Kursverlusten.
-- UNKNOWN oder SUBMITTED Trades blockieren automatisierte Neukäufe bis zur manuellen Klärung.
-- Ein separater GitHub-Zweig schützt die ursprüngliche BMW-Anwendung vor Änderungen.
+## 4. Die eigene Engine automatisch Echtgeld handeln lassen
+
+Das Feature ist standardmäßig serverseitig AUS. Zur gesonderten Freigabe auf deinem Server:
+
+    ALLOW_AUTONOMOUS_LIVE=YES_I_ACCEPT_AUTONOMOUS_LOSSES
+
+Danach in der App im **KI-Bot** die Echtgeld-Automatik ausdrücklich für **30 Minuten** starten. Die Engine analysiert ausschließlich die festgelegten erlaubten Mint-Adressen, prüft Risikolimits und RugCheck und führt bei positivem Quant-Signal Jupiter-Swaps aus. Kein Grok-Key und kein sonstiger KI-Key nötig.
+
+**WICHTIGE GRENZE:** Nach Ablauf von 30 Minuten überwacht der Bot offene Echtgeldpositionen **nicht mehr**. Auch während der Sitzung sind Stop-Loss-Regeln nicht garantiert; Blockchain- oder Server-Ausfälle, Slippage, geringe Liquidität und Rug Pulls können Verluste bis 100 % verursachen. Bisher gibt es keinen nachgewiesenen profitablen Backtest, keinen externen Sicherheits-Audit und keine bestätigten echten End-to-End-Trades. Bitte nicht mit nennenswerten Beträgen betreiben.
+
+Not-Aus über **KI-Bot → NOT-AUS**, zusätzlich serverseitig STOP-Datei anlegen (in Docker: /app/private/STOP) oder Server abschalten. Bereits gesendete Swaps sind nicht rückgängig zu machen.
+
+## 5. Fehlersuche
+
+- **Keine Kurse:** Internet prüfen, Radar-Kurse neu laden. Ohne echte Marktdaten keine Engine-Käufe.
+- **HOLD:** Sicherheits- oder Marktschwellen nicht erfüllt. Ein HOLD absichtlich nicht übersteuern.
+- **Wallet leer:** Server/Wallet ist noch nicht verbunden. App allein kann keine Blockchain-Transaktionen signieren.
+- **Auto-Bot gesperrt:** Live-Freigabe, Server-Allowlist, Limits oder Sicherheitsstopp prüfen.
+- **UNKNOWN/SUBMITTED:** Blockchainstatus und Wallet manuell abgleichen, nie blind erneut ausführen.
+
+Quellcode im Feature-Branch: https://github.com/GoldenUnicorn24/Bmw/tree/feature/memepulse-v04-native-ai/memepulse
