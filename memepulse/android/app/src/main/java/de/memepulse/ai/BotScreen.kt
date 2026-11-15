@@ -48,7 +48,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 MiniLabel("◈   AI ENGINE / CONTROL CENTER", bright)
-                MiniLabel("v0.7  DUAL RESEARCH", secondary)
+                MiniLabel("v0.9  SAFETY & WALLET", secondary)
             }
             Spacer(Modifier.height(1.dp))
             Text("Trade smarter.", color = white, fontSize = 30.sp, fontWeight = FontWeight.Black, lineHeight = 34.sp)
@@ -57,6 +57,26 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 StatusPill(if (engineReady) "● ENGINE / SERVER" else "● ENGINE / GERÄT", if (engineReady) mint else bright)
                 StatusPill(if (s.realMarket) "● LIVE-MARKT" else "○ KURSE FEHLEN", if (s.realMarket) mint else bright)
+            }
+        }
+        Surface(color = tile, shape = RoundedCornerShape(17.dp)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("ECHTGELD-REIFEPRÜFUNG", color = white,
+                    fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                val readiness = s.readiness
+                Text(if (readiness?.optBoolean("productionReady") == true)
+                    "Server freigegeben" else "NICHT FÜR ECHTGELD FREIGEGEBEN",
+                    color = if (readiness?.optBoolean("productionReady") == true) mint else danger,
+                    fontWeight = FontWeight.Bold)
+                Text("Geprüfte Serverpunkte: " +
+                    (readiness?.optInt("checksPassed", 0) ?: 0) + " / " +
+                    (readiness?.optInt("checkCount", 0) ?: 0),
+                    color = secondary, fontSize = 11.sp)
+                OutlinedButton(onClick = { s.activePage = 4 },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("Einrichtung, Sicherheitscheck & Auszahlung", color = bright)
+                }
             }
         }
         if (s.paperMode) {
@@ -133,7 +153,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
                 Text("NUR native SOL an eine zuvor von dir kontrollierte, unabhängig geprüfte Adresse senden. Nie SOL an unbekannte Adressen einzahlen. Eine Einzahlung startet keine Trades.",
                     color = danger, fontSize = 11.sp, lineHeight = 15.sp)
-                Text("WICHTIG: Noch keine Auszahlungsfunktion in dieser Beta. Nicht einzahlen, bevor du selbst einen überprüften, sicheren Weg zur Rücküberweisung aus deiner Wallet besitzt.",
+                Text("WICHTIG: Die manuelle SOL-Auszahlung ist jetzt unter Einstellungen verfügbar, bleibt serverseitig standardmäßig AUS und ist nicht auf Mainnet geprüft. Nicht einzahlen, bevor Rücküberweisung und Sicherheit unabhängig getestet wurden.",
                     color = danger, fontSize = 11.sp, lineHeight = 15.sp)
                 s.botRisk?.let { r ->
                     BotLine("Risikostopp", if (r.optBoolean("halted")) "AKTIV" else "NICHT AUSGELÖST",
