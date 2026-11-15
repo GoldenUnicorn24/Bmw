@@ -28,6 +28,28 @@ export function parseDailyCsv(raw){
  }
  return [...unique.values()].sort((a,b)=>a.at-b.at);
 }
+
+export function parseYahooDaily(input,expectedTicker) {
+ let doc;
+ try {doc=typeof input==='string'?JSON.parse(input):input;} catch {return [];}
+ const item=doc?.chart?.result?.[0];
+ const meta=item?.meta;
+ if(!meta||String(meta.symbol||'').toUpperCase()!==String(expectedTicker||'').toUpperCase())
+   return [];
+ if(meta.currency!=='USD'||(meta.instrumentType&&meta.instrumentType!=='EQUITY'))return [];
+ const q=item.indicators?.quote?.[0]||{};
+ const ts=item.timestamp||[];
+ if(!Array.isArray(ts)||ts.length>1800)return [];
+ const lines=['Date,Open,High,Low,Close,Volume'];
+ for(let i=0;i<ts.length;i++){
+  const t=Number(ts[i]),o=Number(q.open?.[i]),h=Number(q.high?.[i]),
+    l=Number(q.low?.[i]),cl=Number(q.close?.[i]),v=Number(q.volume?.[i]);
+  if(![t,o,h,l,cl,v].every(Number.isFinite))continue;
+  lines.push([new Date(t*1000).toISOString().slice(0,10),o,h,l,cl,v].join(','));
+ }
+ return parseDailyCsv(lines.join('\n'));
+}
+
 const ln=(a,b)=>Math.log(a/b);
 export function pennyFeatures(bars,i){
  if(!Array.isArray(bars)||i<65||i>=bars.length)return null;
