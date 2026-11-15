@@ -21,10 +21,15 @@ export function splitExamples(rows){
     const hash=crypto.createHash('sha256').update('memepulse-v06:'+p).digest();
     return hash[0]<52;
   }));
-  // Ensure a useful disjoint pool test even for a small collection.
-  if(heldout.size<2&&pools.length>=8){
+  // Always keep at least one completely unseen token in the report once
+  // three different mints exist. The high-confidence production gates still
+  // require at least TWO unseen pools and meaningful sample counts.
+  if(pools.length>=3 && heldout.size===0)heldout.add(pools.at(-1));
+  if(pools.length>=5 && heldout.size<2){
     for(const p of pools.slice(-2))heldout.add(p);
   }
+  // A test is not valid if every token was excluded from the training universe.
+  if(heldout.size>=pools.length&&pools.length>=3)heldout.delete(pools[0]);
   const trainPools=clean.filter(x=>!heldout.has(x.pool));
   const times=trainPools.map(x=>x.at).sort((a,b)=>a-b);
   const cutoff=times[Math.floor(times.length*.72)]??0;
