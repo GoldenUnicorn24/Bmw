@@ -103,6 +103,30 @@ private fun MemePulse(s: MemeStore) {
                 }
             }
         }
+        s.candidateReview?.let { review ->
+            AlertDialog(onDismissRequest = { s.candidateReview = null }, containerColor = Panel2,
+                title = { Text("KI-TOKEN SICHERHEITSCHECK", color = White, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Mint: " + review.optString("mint"), color = White, fontSize = 11.sp)
+                        val safety = review.optJSONObject("safety")
+                        Text("RugCheck: " + (safety?.optInt("score")?.toString() ?: "nicht verfügbar"), color = Muted)
+                        Text("Liquidität: " + usd(review.optJSONObject("market")?.optDouble("liquidityUsd", 0.0) ?: 0.0), color = Muted)
+                        Text("Markt-Score: " + (review.optJSONObject("market")?.optInt("score") ?: "siehe Radar"), color = Muted)
+                        Text(if (review.optBoolean("approved")) "Die technischen Mindestprüfungen sind erfüllt. Dies ist keine Garantie gegen Rug Pulls." else
+                            "NICHT FREIGEGEBEN: " + (review.optJSONArray("reasons")?.optString(0) ?: "Sicherheitsregel blockiert"),
+                            color = if (review.optBoolean("approved")) Green else Red, fontSize = 12.sp)
+                        Text("Durch Freigabe kann der KI-Agent diesen Token im aktiven 30-Minuten-Live-Modus mit echtem Geld kaufen.", color = Red, fontSize = 11.sp)
+                    }
+                },
+                confirmButton = {
+                    if (review.optBoolean("approved")) Button(onClick = { s.approveToken() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Red)) {
+                        Text("Für KI-Trades freigeben", color = Background)
+                    }
+                },
+                dismissButton = { TextButton(onClick = { s.candidateReview = null }) { Text("Abbrechen") } })
+        }
         s.pendingPreview?.let { q ->
             AlertDialog(onDismissRequest = { s.pendingPreview = null },
                 containerColor = Panel2,
@@ -226,6 +250,7 @@ private fun Radar(s: MemeStore) {
     val shown = s.coins.filter { it.symbol.contains(query, true) || it.name.contains(query, true) || it.mint.contains(query, true) }
         .filter { !minScore || it.score >= 75 }.sortedByDescending { it.score }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        StatusRibbons(s)
         SectionHeader("Token entdecken", if (s.realMarket) "SOLANA · AKTUELLE KURSE" else "OFFLINE DEMO")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { s.refreshMarket() }, enabled = !s.marketLoading, modifier = Modifier.weight(1f)) {
@@ -282,6 +307,9 @@ private fun TokenCard(c: Coin, s: MemeStore, compact: Boolean) {
                 Caption("VOL  " + usd(c.volume), color = Muted)
                 Caption(c.score.toString() + "/100", color = if (c.score >= 75) Green else Violet)
             }
+            LinearProgressIndicator(progress = { c.score.coerceIn(0, 100) / 100f },
+                modifier = Modifier.fillMaxWidth().height(4.dp), color = if (c.score >= 75) Green else Violet,
+                trackColor = Panel2)
             if (!compact) {
                 Caption(if (c.live) "MARKT-SCORE ≠ RUGCHECK-AUDIT" else "SIMULIERTE MARKTDATEN", color = Muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -294,6 +322,10 @@ private fun TokenCard(c: Coin, s: MemeStore, compact: Boolean) {
                     OutlinedButton(onClick = { s.analyze(c) }, enabled = c.live && !s.requesting) {
                         Text("Grok prüfen", fontSize = 12.sp)
                     }
+                }
+                OutlinedButton(onClick = { s.reviewToken(c) }, enabled = c.live && !s.requesting,
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("◉ RugCheck + für KI-Freigabe prüfen", fontSize = 11.sp)
                 }
             }
         }
@@ -399,6 +431,19 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
                     Caption("WALLET: " + it.optString("wallet", "nicht verbunden").take(24) + "…", color = Muted)
                     Caption("Max je Kauf: " + it.optDouble("maxTradeSol", 0.0) + " SOL · Tagesbudget: " + it.optDouble("maxDailySpendSol", 0.0) + " SOL", color = Muted)
                     Caption("Allowlist: " + (it.optJSONArray("whitelistedMints")?.length() ?: 0) + " geprüfte Coins", color = Muted)
+                }
+            }
+        }
+        SectionHeader("KI-Freigabeliste", "NUR GEPRÜFTE TOKEN")
+        val allowed = s.serverStatus?.optJSONArray("whitelistedMints")
+        if (allowed == null || allowed.length() == 0) Hint("Noch keine Coins freigegeben. Im Live-Radar einen Coin auswählen und Sicherheitscheck öffnen.")
+        if (allowed != null) for (i in 0 until allowed.length()) {
+            val mint = allowed.optString(i)
+            Surface(color = Panel, shape = RoundedCornerShape(12.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(mint.take(10) + "…" + mint.takeLast(5), color = White, fontSize = 12.sp)
+                    TextButton(onClick = { s.removeToken(mint) }, enabled = !s.requesting) { Text("Entfernen", color = Red) }
                 }
             }
         }
