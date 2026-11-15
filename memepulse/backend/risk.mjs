@@ -29,7 +29,7 @@ export function marketRejectReasons(t, minScore = 75) {
 export function rugRejectReasons(report) {
   if (!report || !Number.isFinite(Number(report.score_normalised))) return ['RugCheck nicht verfügbar'];
   const reasons = [];
-  if (Number(report.score_normalised) < 70) reasons.push('RugCheck-Wert unter 70');
+  if (Number(report.score_normalised) > 30) reasons.push('RugCheck-Risiko zu hoch (über 30/100; niedriger ist sicherer)');
   if ((report.risks || []).some(r => ['danger', 'critical'].includes(String(r.level || '').toLowerCase()))) {
     reasons.push('Kritischer Token-Risikohinweis');
   }
