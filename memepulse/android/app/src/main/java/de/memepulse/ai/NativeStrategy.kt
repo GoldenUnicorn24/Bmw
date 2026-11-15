@@ -13,6 +13,9 @@ data class NativeSignal(val action: String, val score: Int, val reason: String, 
         .put("reason", reason).put("eligible", eligible)
         .put("engine", "memepulse-quant-v1")
 }
+data class MarketProbe(val at: Long, val price: Double, val liquidity: Double)
+
+data class ConfirmedTrend(val eligible: Boolean, val reason: String, val samples: Int)
 object NativeStrategy {
     fun analyze(t: Coin): NativeSignal {
         val blockers = mutableListOf<String>()
@@ -77,4 +80,34 @@ object NativeStrategy {
         }
         return failures.distinct()
     }
+    // Three independent samples over >=2 minutes, not merely API refresh duplicates.
+    fun confirm(probes: List<MarketProbe>, now: Long = System.currentTimeMillis()): ConfirmedTrend {
+        val latest = probes.filter {
+            it.at <= now && now - it.at <= 900000 &&
+                it.price.isFinite() && it.price > 0 &&
+                it.liquidity.isFinite() && it.liquidity > 0
+        }.takeLast(6)
+        if (latest.size < 3) return ConfirmedTrend(false, "Benötigt mindestens 3 Kursmessungen", latest.size)
+        if (latest.last().at - latest.first().at < 120000)
+            return ConfirmedTrend(false, "Kursüberwachung noch zu kurz", latest.size)
+        if (now - latest.last().at > 110000)
+            return ConfirmedTrend(false, "Kursmessungen nicht aktuell", latest.size)
+        val peak = latest.maxOf { it.price }
+        val low = latest.minOf { it.price }
+        val liqMax = latest.maxOf { it.liquidity }
+        val current = latest.last()
+        val change = (current.price / latest.first().price - 1) * 100
+        val recent = (current.price / latest[latest.size-2].price - 1) * 100
+        val peakDrop = (1 - current.price / peak) * 100
+        val liquidFade = (1 - current.liquidity / liqMax)
+        val bad = when {
+            latest.minOf { it.liquidity } < 75000 || liquidFade > .2 -> "Liquidität sinkt zu stark"
+            (peak / low - 1) * 100 > 16 -> "Preis zu volatil"
+            peakDrop > 6 || recent < -4 -> "Momentum bricht ein"
+            change < -2 || change > 13 -> "Unbestätigter Trend oder Pump-Signal"
+            else -> null
+        }
+        return ConfirmedTrend(bad == null, bad ?: "Drei Kurspunkte bestätigen Trend", latest.size)
+    }
+
 }
