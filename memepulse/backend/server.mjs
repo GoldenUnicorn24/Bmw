@@ -19,6 +19,7 @@ const GROK_KEY = env.XAI_API_KEY || '';
 const GROK_MODEL = env.XAI_MODEL || 'grok-4.7';
 const RPC = env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const DATA_FILE = env.TRADE_LOG_PATH || './private/trades.json';
+const STOP_FILE = env.STOP_FILE || './STOP';
 const MAX_TRADE = BigInt(Math.round(Number(env.MAX_TRADE_SOL || '0.01') * 1e9));
 const MAX_DAILY = BigInt(Math.round(Number(env.MAX_DAILY_SPEND_SOL || '0.05') * 1e9));
 const RESERVE = BigInt(Math.round(Number(env.MIN_SOL_RESERVE || '0.02') * 1e9));
@@ -149,7 +150,7 @@ async function rugReport(mint) {
 function assertCanTrade() {
   if (!LIVE) throw Error('Echtgeldhandel ist serverseitig deaktiviert');
   if (!signer) throw Error('Kein Trading-Wallet auf dem Server');
-  if (fs.existsSync('./STOP')) throw Error('STOP-Datei vorhanden: alle Trades gesperrt');
+  if (fs.existsSync(STOP_FILE)) throw Error('STOP-Datei vorhanden: alle Trades gesperrt');
   if (busy) throw Error('Ein Trade wird bereits ausgeführt');
 }
 async function prepareOrder(body, source = 'MANUAL') {
@@ -320,7 +321,7 @@ async function agentCycle() {
     activeUntil = 0;
     return;
   }
-  if (fs.existsSync('./STOP')) { activeUntil = 0; agentEvent('STOPPED', 'STOP-Datei erkannt'); return; }
+  if (fs.existsSync(STOP_FILE)) { activeUntil = 0; agentEvent('STOPPED', 'STOP-Datei erkannt'); return; }
   if (busy || Date.now() - lastAutoCycle < 90000) return;
   lastAutoCycle = Date.now();
   const halt = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
@@ -350,7 +351,7 @@ async function agentCycle() {
   }
   if (holdings.length >= MAX_OPEN_POSITIONS) return;
   for (const mint of ALLOWLIST) {
-    if (Date.now() >= activeUntil || fs.existsSync('./STOP')) return;
+    if (Date.now() >= activeUntil || fs.existsSync(STOP_FILE)) return;
     if (cooldown.get(mint) && Date.now() - cooldown.get(mint) < 86400000) continue;
     if (journal.some(t => t.side === 'BUY' && t.mint === mint && t.at > Date.now() - 86400000 &&
       ['SUBMITTED', 'SUCCESS', 'UNKNOWN'].includes(t.status))) continue;
@@ -361,7 +362,7 @@ async function agentCycle() {
       agentEvent(result.eligible ? 'BUY_SIGNAL' : 'HOLD_SIGNAL', mint.slice(0, 12) + ' · ' + (result.reason || 'Kein Signal'));
       if (!result.eligible) continue;
       const preview = await prepareOrder({ side: 'BUY', mint, amountSol: Number(MAX_TRADE) / 1e9 }, 'GROK');
-      if (Date.now() >= activeUntil || fs.existsSync('./STOP')) return;
+      if (Date.now() >= activeUntil || fs.existsSync(STOP_FILE)) return;
       await executeOrder(preview.previewId, 'GROK');
       return; // Only one transaction per cycle.
     } catch (err) {
@@ -384,7 +385,7 @@ const server = http.createServer(async (req, res) => {
       maxOrdersPerDay: MAX_ORDERS, maxOpenPositions: MAX_OPEN_POSITIONS,
       stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
       maxDailyRealizedLossSol: MAX_REALIZED_LOSS_SOL,
-      risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL), stopped: fs.existsSync('./STOP'),
+      risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL), stopped: fs.existsSync(STOP_FILE),
       warning: 'Kein garantierter Profit. Sicherheitsprüfung ersetzt kein Audit.'
     });
     if (req.method === 'GET' && url.pathname === '/api/market') return reply(res, 200, {
@@ -392,7 +393,7 @@ const server = http.createServer(async (req, res) => {
     });
     if (req.method === 'GET' && url.pathname === '/api/trades') return reply(res, 200, { trades: journal.slice(-80).reverse() });
     if (req.method === 'GET' && url.pathname === '/api/agent') return reply(res, 200, {
-      active: Date.now() < activeUntil && !fs.existsSync('./STOP'),
+      active: Date.now() < activeUntil && !fs.existsSync(STOP_FILE),
       expiresAt: activeUntil || null, lastObservation: lastAgentObservation,
       lastError: lastAgentError, events: agentEvents,
       limits: { stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
@@ -432,7 +433,7 @@ const server = http.createServer(async (req, res) => {
       if (!AUTO_ALLOWED || !LIVE || !GROK_KEY || !ALLOWLIST.size) throw Error('Autonomes Trading nicht vollständig freigeschaltet');
       const safety = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
       if (safety.halted) throw Error('Bot wegen Risikostopp blockiert: ' + safety.reasons.join('; '));
-      if (fs.existsSync('./STOP')) throw Error('STOP-Datei blockiert den Bot');
+      if (fs.existsSync(STOP_FILE)) throw Error('STOP-Datei blockiert den Bot');
       if (body.confirm !== 'ACTIVATE AUTOMATIC LIVE TRADING') throw Error('Autonome Bestätigung fehlt');
       activeUntil = Date.now() + 30 * 60 * 1000; // User must renew; never persists across restarts.
       agentEvent('ACTIVATED', 'Benutzer aktivierte eine 30-Minuten-Session');
