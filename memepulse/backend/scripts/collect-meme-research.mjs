@@ -9,7 +9,8 @@ import {trainResearch} from '../research/learner.mjs';
 const CG='https://api.coingecko.com/api/v3';
 const GT='https://api.geckoterminal.com/api/v2';
 const DIR=process.env.MEME_OUTPUT_DIR||'./research-output/meme-coins';
-const MAX=Math.min(16,Math.max(1,Number(process.env.MEME_COIN_LIMIT||10)));
+const MAX=Math.min(40,Math.max(1,Number(process.env.MEME_COIN_LIMIT||24)));
+const MAX_CANDLE_PAGES=Math.min(3,Math.max(1,Number(process.env.MEME_CANDLE_PAGES||2)));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 fs.mkdirSync(DIR,{recursive:true});
 let lastReq=0;
@@ -39,18 +40,32 @@ const provenance={assetClass:'SOLANA_MEME_COINS',source:'CoinGecko Solana Meme c
  collectedAt:new Date().toISOString(),classificationAsOf:new Date().toISOString(),
  warning:'Membership determined today, historical retrospective labels have selection and survivorship bias'};
 const failures=[],history=[],examples=[];
+let listing=new Map();
+try {
+ const list=await jsonGet(CG+'/coins/list?include_platform=true');
+ if(Array.isArray(list))for(const row of list){
+   const mint=String(row.platforms?.solana||'');
+   if(typeof row.id==='string'&&/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint))
+     listing.set(row.id,mint);
+ }
+ console.log('Verified Solana contract IDs in CoinGecko list:',listing.size);
+}catch(e){failures.push({stage:'COIN_PLATFORM_LIST',error:String(e.message).slice(0,120)});}
 let results=[];
 try{
- const data=await jsonGet(CG+'/coins/markets?vs_currency=usd&category=solana-meme-coins&order=market_cap_desc&per_page=40&page=1');
+ const data=await jsonGet(CG+'/coins/markets?vs_currency=usd&category=solana-meme-coins&order=market_cap_desc&per_page=100&page=1');
  if(!Array.isArray(data))throw Error('CoinGecko returned no category array');
  results=data.filter(x=>typeof x.id==='string'&&/^[a-z0-9-]{2,120}$/.test(x.id)).slice(0,MAX);
 }catch(e){failures.push({stage:'CATEGORY_DISCOVERY',message:String(e.message).slice(0,160)});}
 for(const coin of results){
  try{
-   // Only a matching named Solana contract from CoinGecko is acceptable.
-   const info=await jsonGet(CG+'/coins/'+encodeURIComponent(coin.id)+
-     '?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false&sparkline=false');
-   const mint=String(info.platforms?.solana||info.detail_platforms?.solana?.contract_address||'');
+   // An official platforms-list lookup avoids rate-limited per-token calls.
+   // If unavailable, verify an individual CoinGecko coin detail as fallback.
+   let mint=listing.get(coin.id)||'';
+   if(!mint){
+     const info=await jsonGet(CG+'/coins/'+encodeURIComponent(coin.id)+
+       '?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false&sparkline=false');
+     mint=String(info.platforms?.solana||info.detail_platforms?.solana?.contract_address||'');
+   }
    if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint))
       throw Error('Verified Solana contract missing; classification withheld');
    const token=await jsonGet(GT+'/networks/solana/tokens/'+encodeURIComponent(mint)+'/pools');
@@ -64,9 +79,25 @@ for(const coin of results){
     '/ohlcv/minute?aggregate=5&currency=usd&limit=900';
    const ohlcv=await jsonGet(source);
    const raw=ohlcv.data?.attributes?.ohlcv_list||[];
-   const candles=parseCandles(raw);
+   let candles=parseCandles(raw);
+   // Extend genuinely observed history backward; do not fabricate missing intervals.
+   for(let page=1;page<MAX_CANDLE_PAGES&&candles.length>=300;page++){
+     try{
+       const before=candles[0].time-1;
+       const extra=await jsonGet(GT+'/networks/solana/pools/'+selected.address+
+         '/ohlcv/minute?aggregate=5&currency=usd&limit=900&before_timestamp='+before);
+       const previous=parseCandles(extra.data?.attributes?.ohlcv_list||[]);
+       if(!previous.length)break;
+       const merged=parseCandles([...candles,...previous].map(x=>
+         [x.time,x.open,x.high,x.low,x.close,x.volume]));
+       if(merged.length===candles.length)break;
+       candles=merged;
+     }catch(err){failures.push({coinId:coin.id,stage:'OLDER_CANDLES',
+       error:String(err.message).slice(0,110)});break;}
+   }
    const ex=makeExamples(mint,candles.map(b=>[b.time,b.open,b.high,b.low,b.close,b.volume]));
    if(ex.length<12)throw Error('Insufficient continuous 5m history');
+   if(history.some(x=>x.meta.mint===mint))throw Error('Duplicate coin mint: no extra training weight');
    const meta={coinId:coin.id,coinName:String(coin.name||'').slice(0,70),
      mint,geckoPool:selected.address,category:'solana-meme-coins',liquidityAtCollection:selected.liq,
      classificationSource:provenance.classificationUrl,ohlcvSource:source};
