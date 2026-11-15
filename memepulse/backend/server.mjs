@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { Keypair, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { confirmedPositions, exitSignal, safetyStatus, shouldHaltForUnknown } from './botPolicy.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
 const env = process.env;
@@ -22,6 +23,11 @@ const MAX_TRADE = BigInt(Math.round(Number(env.MAX_TRADE_SOL || '0.01') * 1e9));
 const MAX_DAILY = BigInt(Math.round(Number(env.MAX_DAILY_SPEND_SOL || '0.05') * 1e9));
 const RESERVE = BigInt(Math.round(Number(env.MIN_SOL_RESERVE || '0.02') * 1e9));
 const MAX_ORDERS = Math.max(1, Math.min(5, Number(env.MAX_ORDERS_PER_DAY || '3')));
+const MAX_REALIZED_LOSS_SOL = Math.min(1, Math.max(0.001, Number(env.MAX_DAILY_REALIZED_LOSS_SOL || '0.015')));
+const MAX_OPEN_POSITIONS = Math.max(1, Math.min(3, Number(env.MAX_OPEN_POSITIONS || '2')));
+const STOP_LOSS_PCT = Math.min(30, Math.max(3, Number(env.STOP_LOSS_PCT || '12')));
+const TAKE_PROFIT_PCT = Math.min(100, Math.max(5, Number(env.TAKE_PROFIT_PCT || '25')));
+const MAX_PRICE_IMPACT_PCT = Math.min(5, Math.max(0.2, Number(env.MAX_PRICE_IMPACT_PCT || '2')));
 const MAX_SLIPPAGE_BPS = Math.min(200, Math.max(25, Number(env.MAX_SLIPPAGE_BPS || '100')));
 const CONTROL_MAX_AGE_MS = 30000;
 if (!RPC.startsWith('https://')) throw Error('SOLANA_RPC_URL must be HTTPS');
@@ -34,6 +40,14 @@ catch (err) { if (err.code !== 'ENOENT') throw Error('Cannot load trade journal:
 let busy = false;
 let activeUntil = 0;
 let lastAutoCycle = 0;
+let lastAgentObservation = null;
+let lastAgentError = null;
+let agentEvents = [];
+let lastExitAttempt = new Map();
+function agentEvent(event, details = '') {
+  agentEvents.unshift({ at: Date.now(), event, details: String(details).slice(0, 240) });
+  agentEvents = agentEvents.slice(0, 60);
+}
 let marketCache = { at: 0, tokens: [] };
 const prepared = new Map();
 const usedKeys = new Map();
