@@ -227,6 +227,9 @@ async function prepareOrder(body, source = 'MANUAL') {
 }
 async function executeOrder(id, source) {
   assertCanTrade();
+  // Acquire the execution lock BEFORE any asynchronous RPC to prevent parallel spends.
+  busy = true;
+  try {
   const order = prepared.get(id);
   if (!order) throw Error('Quote abgelaufen oder bereits verwendet');
   prepared.delete(id);
@@ -243,7 +246,6 @@ async function executeOrder(id, source) {
   if (order.side === 'BUY' && confirmedPositions(journal).positions.some(p => p.mint === order.mint))
     reasons.push('Token bereits gehalten');
   if (reasons.length) throw Error('Trade wegen Limit gestoppt: ' + reasons.join('; '));
-  busy = true;
   const entry = { id, at: Date.now(), side: order.side, mint: order.mint,
     amountLamports: order.amountLamports, estimatedOutputAtomic: order.estimatedOutputAtomic,
     entryPriceUsd: order.market?.priceUsd ?? null,
@@ -275,6 +277,7 @@ async function executeOrder(id, source) {
     entry.error = String(err.message).slice(0, 200);
     saveJournal();
     throw Error('Ausführung ungewiss. Nicht erneut klicken! Signatur/Wallet im Explorer prüfen. ' + entry.error);
+  }
   } finally { busy = false; }
 }
 function signalText(data, safe) {
