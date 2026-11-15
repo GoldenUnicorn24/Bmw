@@ -2,6 +2,9 @@
 
 ## Neu in v0.5: Autopilot 2 und eigene Einzahlungsadresse
 
+**Auszahlungen:** Die Beta besitzt derzeit **keinen** integrierten Auszahlungsdialog. Die separate Trading-Wallet muss jederzeit über einen unabhängigen, von dir getesteten Weg rückübertragbar sein. **Bis diese Rückübertragung sicher möglich ist, bitte kein echtes Geld einzahlen.**
+
+
 - **Keine KI-Abonnements:** Eine selbst programmierte Regel-Engine analysiert gleichzeitig mehrere Zeiträume, Liquiditätsbewegungen und Kaufdruck; dies ist **kein trainiertes neuronales Netz** und **keine bewiesene Gewinnstrategie**.
 - **Dreifache Marktbestätigung:** Vor Echtgeldkäufen müssen mindestens drei unabhängige Kursmessungen über mindestens zwei Minuten vorliegen. Plötzliche Kurssprünge und Liquiditätsabflüsse stoppen Käufe.
 - **Risikoadaptives Budget:** Pro Kauf maximal 2 % verfügbares Walletkapital (zusätzlich zu den serverseitigen Trade- und Tageslimits). Das modellierte Stop-Risiko liegt bei höchstens 0,5 % des Walletwertes; echte Verluste können erheblich höher sein.
