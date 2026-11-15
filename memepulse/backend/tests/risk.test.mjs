@@ -12,7 +12,9 @@ test('market score uses explicit metrics', () => {
 test('rug score fails closed when unavailable or critical', () => {
   assert.ok(rugRejectReasons(null).length);
   assert.ok(rugRejectReasons({ score_normalised: 75, risks: [{ level: 'danger' }] }).length);
-  assert.deepEqual(rugRejectReasons({ score_normalised: 80, risks: [] }), []);
+  assert.ok(rugRejectReasons({ score_normalised: 80, risks: [] }).length);
+  assert.deepEqual(rugRejectReasons({ score_normalised: 10, risks: [] }), []);
+  assert.ok(rugRejectReasons({ score_normalised: 20, risks: [{ level: 'danger' }] }).length);
 });
 test('buy requires allowlist and respects trade ceiling and daily cap', () => {
   const config = { side: 'BUY', mint: 'good', amountLamports: 8_000_000n, allowlist: new Set(['good']),
