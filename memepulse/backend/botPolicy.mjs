@@ -34,7 +34,7 @@ export function confirmedPositions(journal) {
   }
   return { positions: [...state.values()].filter(p => p.tokens > 0n).map(p => ({
     mint: p.mint, tokenAtomic: p.tokens.toString(), costSolAtomic: p.costSol.toString(),
-    entryPriceUsd: p.entryPriceUsd, buyAt: p.buyAt, autoOwned: p.sources.has('GROK')
+    entryPriceUsd: p.entryPriceUsd, buyAt: p.buyAt, autoOwned: p.sources.has('ENGINE')
   })), realized: realized.map(r => ({ ...r, pnlSolAtomic: r.pnlSolAtomic.toString(),
     soldTokensAtomic: r.soldTokensAtomic.toString(), realizedOutputSolAtomic: r.realizedOutputSolAtomic.toString() })) };
 }
