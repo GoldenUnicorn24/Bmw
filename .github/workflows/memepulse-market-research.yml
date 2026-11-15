@@ -52,11 +52,11 @@ jobs:
 
   verified-meme-coins:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/memepulse-v07-dual-market-research
+          ref: feature/memepulse-v08-live-safety-and-meme-data
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -64,7 +64,9 @@ jobs:
       - name: Independently verify CoinGecko Solana meme category and research candles
         working-directory: memepulse/backend
         env:
-          MEME_COIN_LIMIT: "9"
+          MEME_COIN_LIMIT: "16"
+          MEME_CANDLE_PAGES: "3"
+          MEME_POOL_TRIES: "2"
           ENABLE_LIVE_TRADES: "NO"
           ALLOW_AUTONOMOUS_LIVE: "NO"
           ENABLE_WALLET_WITHDRAWALS: "NO"
