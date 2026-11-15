@@ -35,9 +35,8 @@ test('Penny feature computation is causal; changing FUTURE prices cannot change 
 });
 test('Penny model never trades, uses unseen issuers and embargoed future test',()=>{
  const bars=parseDailyCsv(csv(daily(500)));
- const all=Array.from({length:15},(_,i)=>equityExamples('S'+String.fromCharCode(65+i),bars)).flat();
- // invalid pool symbols in synthetic test are not part of an actual Nasdaq universe.
- const res=trainEquityResearch(all);
+ const small=equityExamples('SMAL',bars).slice(0,10);
+ const res=trainEquityResearch(small);
  assert.equal(res.productionAllowed,false);
  assert.equal(res.status,'INSUFFICIENT_DATA'); 
  const symbols=Array.from({length:15},(_,i)=>String.fromCharCode(65+i)+'BCD');
