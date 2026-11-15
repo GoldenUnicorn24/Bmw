@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import bs58 from 'bs58';
 import {Keypair,VersionedTransaction,TransactionMessage,ComputeBudgetProgram,
   SystemProgram,TOKEN_PROGRAM_ID,PublicKey} from '@solana/web3.js';
-import {inspectSwapTransaction,checkJupiterExecution,verifySwapChainReceipt,
-  waitForConfirmedReceipt} from '../swapGuard.mjs';
+import {inspectSwapTransaction,validateSwapSimulation,checkJupiterExecution,
+  verifySwapChainReceipt,waitForConfirmedReceipt} from '../swapGuard.mjs';
 const wallet=Keypair.generate();
 const token=Keypair.generate().publicKey.toBase58();
 const recentBlockhash='11111111111111111111111111111111';
@@ -72,4 +72,14 @@ test('no receipt after all polling rounds must fail closed',async()=>{
  await assert.rejects(()=>waitForConfirmedReceipt(fake,sig,{polls:2,waitMs:1}),/unavailable/);
  const chain=async()=>({meta:{err:null}});
  assert.ok(await waitForConfirmedReceipt(chain,sig,{polls:1}));
+});
+
+test('preflight simulation must explicitly succeed within compute budget',()=>{
+ assert.deepEqual(validateSwapSimulation({value:{err:null,unitsConsumed:900000}}),
+  {simulated:true,unitsConsumed:900000});
+ assert.throws(()=>validateSwapSimulation({value:{err:'CustomError',unitsConsumed:1000}}),
+  /simulation/);
+ assert.throws(()=>validateSwapSimulation({value:{err:null,unitsConsumed:1800000}}),
+  /compute/);
+ assert.throws(()=>validateSwapSimulation(null),/simulation/);
 });
