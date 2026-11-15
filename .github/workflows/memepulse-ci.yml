@@ -6,7 +6,7 @@ on:
       - feature/memepulse-v03-pro-trader
       - feature/memepulse-v04-native-ai
       - feature/memepulse-v05-autopilot
-      - feature/memepulse-v05-autopilot
+      - feature/memepulse-v06-train-lab
     paths:
       - "memepulse/**"
       - ".github/workflows/memepulse-ci.yml"
@@ -68,9 +68,44 @@ jobs:
         working-directory: memepulse/android
         run: gradle --no-daemon :app:assembleDebug
       - name: Prepare APK
-        run: cp memepulse/android/app/build/outputs/apk/debug/app-debug.apk MemePulseAI-Android-v0.5-debug.apk
+        run: cp memepulse/android/app/build/outputs/apk/debug/app-debug.apk MemePulseAI-Android-v0.6-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MemePulseAI-Android-v0.5-debug-APK
-          path: MemePulseAI-Android-v0.5-debug.apk
+          name: MemePulseAI-Android-v0.6-debug-APK
+          path: MemePulseAI-Android-v0.6-debug.apk
           retention-days: 30
+
+  research-data:
+    # Public historical-data collection runs separately from all live trading.
+    if: github.ref == 'refs/heads/feature/memepulse-v06-train-lab'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Restore previous strictly public historical candle cache
+        uses: actions/cache@v4
+        with:
+          path: memepulse/backend/research-output/dataset.json
+          key: memepulse-research-v06-${{ github.run_id }}
+          restore-keys: |
+            memepulse-research-v06-
+      - name: Fetch real Solana OHLCV and train research-only shadow model
+        working-directory: memepulse/backend
+        env:
+          RESEARCH_POOL_LIMIT: "18"
+        run: |
+          node --check research/features.mjs
+          node --check research/learner.mjs
+          node --check scripts/collect-and-train.mjs
+          npm run train:research
+      - name: Upload source-labelled dataset, shadow model and holdout report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemePulse-v0.6-real-market-training-research
+          path: memepulse/backend/research-output/
+          retention-days: 30
+          if-no-files-found: warn

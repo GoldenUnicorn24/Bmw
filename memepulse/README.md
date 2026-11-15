@@ -1,4 +1,4 @@
-# MemePulse AI v0.5 — Native Android Trading Terminal
+# MemePulse AI v0.6 — Native Android Trading Terminal
 
 Eine eigenständige Android-App und Node.js-Solana-Trading-Backend im separaten Feature-Branch des BMW-Repositories. Das vorhandene BMW-Projekt unter /app bleibt unverändert.
 
@@ -16,7 +16,7 @@ MemePulse nutzt die selbst programmierte **Autopilot 2**:
 Dies ist ein **regelbasiertes** Trading-Modell und **kein** trainiertes neuronales Netz. Es hat keine nachgewiesene Gewinnerwartung.
 
 
-## v0.5: Mehrstufiger Autopilot
+## v0.6: Mehrstufiger Autopilot
 
 - Mindestens drei unabhängige Kursmessungen über mindestens zwei Minuten, bevor neue Echtgeldpositionen eröffnet werden dürfen.
 - Zusätzliche Filter gegen Pump-Spikes, schnelle Trendwenden und Liquiditätsabflüsse.
@@ -48,7 +48,7 @@ Dies ist ein **regelbasiertes** Trading-Modell und **kein** trainiertes neuronal
 
 ## Android Build
 GitHub Actions -> **MemePulse AI - Android APK** -> neuester erfolgreicher Lauf auf
-**feature/memepulse-v05-autopilot** -> **Artifacts** -> MemePulseAI-Android-v0.5-debug-APK.
+**feature/memepulse-v06-train-lab** -> **Artifacts** -> MemePulseAI-Android-v0.6-debug-APK.
 
 Lokal (Android SDK 35, Gradle 8.12, JDK 17):
 

@@ -87,6 +87,7 @@ class MemeStore(context: Context) {
     var depositBalance by mutableStateOf<Double?>(null)
     var depositReady by mutableStateOf(false)
     var strategyHealth by mutableStateOf<JSONObject?>(null)
+    var researchReport by mutableStateOf<JSONObject?>(null)
     var botRisk by mutableStateOf<JSONObject?>(null)
     private val simulatedInitial = 1000.0
     private val marketHistory = mutableMapOf<String, MutableList<MarketProbe>>()
@@ -372,6 +373,7 @@ class MemeStore(context: Context) {
         refreshRemoteBot()
         refreshRealPositions()
         refreshDeposit()
+        refreshResearchStatus()
     }
     fun fetchRealHistory() = asyncHistory()
     private fun asyncHistory() {
@@ -538,6 +540,15 @@ class MemeStore(context: Context) {
                 }
                 if (!found) main.post { paperLog("Scan beendet · Sicherheitsfilter verhindert Kauf") }
             } finally { main.post { paperBotWorking = false } }
+        }
+    }
+    fun refreshResearchStatus() {
+        if (backendToken.length < 32) return
+        thread {
+            try {
+                val status = backend("/api/research/status")
+                main.post { researchReport = status }
+            } catch (_: Exception) { }
         }
     }
     fun refreshRemoteBot() {
