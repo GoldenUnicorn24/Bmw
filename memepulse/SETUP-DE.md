@@ -1,6 +1,6 @@
-# MemePulse AI v0.5 – Autopilot 2 auf Android einrichten
+# MemePulse AI v0.6 – Autopilot 2 auf Android einrichten
 
-## Neu in v0.5: Autopilot 2 und eigene Einzahlungsadresse
+## Neu in v0.6: Autopilot 2 und eigene Einzahlungsadresse
 
 **Auszahlungen:** Die Beta besitzt derzeit **keinen** integrierten Auszahlungsdialog. Die separate Trading-Wallet muss jederzeit über einen unabhängigen, von dir getesteten Weg rückübertragbar sein. **Bis diese Rückübertragung sicher möglich ist, bitte kein echtes Geld einzahlen.**
 
@@ -26,8 +26,8 @@ Die beiden Freigaben ENABLE_LIVE_TRADES und ALLOW_AUTONOMOUS_LIVE bleiben ab Wer
 ## 1. Android APK installieren
 1. Öffne https://github.com/GoldenUnicorn24/Bmw/actions
 2. Wähle den Workflow **MemePulse AI - Android APK**.
-3. Öffne den neuesten erfolgreichen Lauf vom Branch **feature/memepulse-v05-autopilot**.
-4. Unter **Artifacts** lade **MemePulseAI-Android-v0.5-debug-APK** herunter. ZIP entpacken und die APK installieren.
+3. Öffne den neuesten erfolgreichen Lauf vom Branch **feature/memepulse-v06-train-lab**.
+4. Unter **Artifacts** lade **MemePulseAI-Android-v0.6-debug-APK** herunter. ZIP entpacken und die APK installieren.
 5. Beim ersten Start ist **Simulation AUS**. Du siehst den echten SOLANA-Markt. Ist noch keine Wallet verbunden, steht dort bewusst kein erfundenes Guthaben.
 6. Unter **Radar → Live-Kurse abrufen** aktualisierst du die Daten. Wähle einen Coin und tippe **Signal prüfen**. Die App analysiert direkt auf dem Handy 5m-/1h-/6h-Trends, Kaufdruck, Liquidität, Volumen sowie den verfügbaren RugCheck-Bericht.
 
@@ -105,4 +105,8 @@ Not-Aus über **KI-Bot → NOT-AUS**, zusätzlich serverseitig STOP-Datei anlege
 - **Auto-Bot gesperrt:** Live-Freigabe, Server-Allowlist, Limits oder Sicherheitsstopp prüfen.
 - **UNKNOWN/SUBMITTED:** Blockchainstatus und Wallet manuell abgleichen, nie blind erneut ausführen.
 
-Quellcode im Feature-Branch: https://github.com/GoldenUnicorn24/Bmw/tree/feature/memepulse-v05-autopilot/memepulse
+Quellcode im Feature-Branch: https://github.com/GoldenUnicorn24/Bmw/tree/feature/memepulse-v06-train-lab/memepulse
+
+## Reales Training
+
+Die neue v0.6 führt mit Github Actions ein Forschungsmodell auf GeckoTerminal-Marktkerzen aus. Details, Datenherkunft, Prüfungen und Anleitung: TRAINING-DE.md. Das Forschungsmodell hat keine Berechtigung für echte Swaps; die erste Auswertung zeigte kein bestätigtes Kaufsignal.
