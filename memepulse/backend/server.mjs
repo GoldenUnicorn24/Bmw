@@ -43,6 +43,8 @@ try { journal = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); if (!Array.isArr
 catch (err) { if (err.code !== 'ENOENT') throw Error('Cannot load trade journal: ' + err.message); }
 let busy = false;
 let activeUntil = 0;
+let exitOnlyUntil = 0;
+let sessionExpiredLogged = false;
 let lastAutoCycle = 0;
 let lastAgentObservation = null;
 let lastAgentError = null;
@@ -321,12 +323,19 @@ function currentPerformance() {
   return strategyHealth(realized);
 }
 async function agentCycle() {
-  if (!AUTO_ALLOWED || !LIVE || !activeUntil || Date.now() >= activeUntil) {
-    if (activeUntil) agentEvent('SESSION_EXPIRED', 'Automatischer Handel nach 30 Minuten beendet');
-    activeUntil = 0;
+  const now = Date.now();
+  const entriesAllowed = AUTO_ALLOWED && LIVE && activeUntil > now;
+  const exitsAllowed = AUTO_ALLOWED && LIVE && exitOnlyUntil > now;
+  if (!entriesAllowed && !exitsAllowed) return;
+  if (!entriesAllowed && !sessionExpiredLogged) {
+    sessionExpiredLogged = true;
+    agentEvent('SESSION_EXPIRED','Käufe gestoppt; bestehende Auto-Positionen werden bis zum Ausstiegsfenster weiter überwacht');
+  }
+  if (fs.existsSync(STOP_FILE)) {
+    activeUntil = 0; exitOnlyUntil = 0;
+    agentEvent('STOPPED', 'STOP-Datei erkannt');
     return;
   }
-  if (fs.existsSync(STOP_FILE)) { activeUntil = 0; agentEvent('STOPPED', 'STOP-Datei erkannt'); return; }
   if (busy || Date.now() - lastAutoCycle < 60000) return;
   lastAutoCycle = Date.now();
   const halt = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
@@ -359,6 +368,7 @@ async function agentCycle() {
       return;
     }
   }
+  if (!entriesAllowed) return; // Exit-only window never places fresh BUY orders.
   if (holdings.length >= MAX_OPEN_POSITIONS) return;
   lastStrategyHealth = currentPerformance();
   if (lastStrategyHealth.halt) {
@@ -398,14 +408,16 @@ async function agentCycle() {
   }
 }
 
-setInterval(() => { if (activeUntil) agentCycle().catch(err => console.error('Agent:', err.message)); }, 60000).unref();
+setInterval(() => { if (activeUntil > Date.now() || exitOnlyUntil > Date.now()) agentCycle().catch(err => console.error('Agent:', err.message)); }, 60000).unref();
 const server = http.createServer(async (req, res) => {
   if (req.url === '/health' && req.method === 'GET') return reply(res, 200, { ok: true, name: 'MemePulse API', realTradesEnabled: LIVE });
   if (!authenticated(req)) return reply(res, 401, { error: 'Bearer-Authentifizierung erforderlich' });
   try {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'GET' && url.pathname === '/api/status') return reply(res, 200, {
-      live: LIVE, autoAllowed: AUTO_ALLOWED, autoActive: activeUntil > Date.now(), autoExpiresAt: activeUntil || null,
+      live: LIVE, autoAllowed: AUTO_ALLOWED, autoActive: activeUntil > Date.now(),
+      exitOnlyActive: exitOnlyUntil > Date.now() && activeUntil <= Date.now(),
+      autoExpiresAt: activeUntil || null, exitProtectionExpiresAt: exitOnlyUntil || null,
       engineConnected: true, strategyName: 'MemePulse Quant v1', engineVersion: 'memepulse-quant-v1-autopilot2', wallet: address, whitelistedMints: [...ALLOWLIST],
       maxTradeSol: Number(MAX_TRADE) / 1e9, maxDailySpendSol: Number(MAX_DAILY) / 1e9,
       maxOrdersPerDay: MAX_ORDERS, maxOpenPositions: MAX_OPEN_POSITIONS,
@@ -422,7 +434,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/trades') return reply(res, 200, { trades: journal.slice(-80).reverse() });
     if (req.method === 'GET' && url.pathname === '/api/agent') return reply(res, 200, {
       active: Date.now() < activeUntil && !fs.existsSync(STOP_FILE),
-      expiresAt: activeUntil || null, lastObservation: lastAgentObservation,
+      exitOnlyActive: Date.now() >= activeUntil && Date.now() < exitOnlyUntil,
+      expiresAt: activeUntil || null, exitProtectionExpiresAt: exitOnlyUntil || null, lastObservation: lastAgentObservation,
       performance: currentPerformance(), historyTracked: snapshots.size,
       lastError: lastAgentError, events: agentEvents,
       limits: { stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
@@ -470,13 +483,16 @@ const server = http.createServer(async (req, res) => {
       if (safety.halted) throw Error('Bot wegen Risikostopp blockiert: ' + safety.reasons.join('; '));
       if (fs.existsSync(STOP_FILE)) throw Error('STOP-Datei blockiert den Bot');
       if (body.confirm !== 'ACTIVATE AUTOMATIC LIVE TRADING') throw Error('Autonome Bestätigung fehlt');
-      activeUntil = Date.now() + AUTOPILOT_SESSION_HOURS * 3600_000; // Always explicit and never persists across restart.
+      activeUntil = Date.now() + AUTOPILOT_SESSION_HOURS * 3600_000; // Always explicit; not persisted across restart.
+      exitOnlyUntil = activeUntil + 2 * 3600_000;
+      sessionExpiredLogged = false;
       agentEvent('ACTIVATED', 'Benutzer aktivierte eine ' + AUTOPILOT_SESSION_HOURS + '-Stunden-Session');
       setImmediate(() => agentCycle().catch(e => { lastAgentError = e.message; agentEvent('ERROR', e.message); }));
       return reply(res, 200, { active: true, expiresAt: activeUntil, note: 'Autopilot startet nur nach ausdrücklicher Freigabe. Käufe nur aus Allowlist und innerhalb Limits.' });
     }
     if (url.pathname === '/api/agent/stop') {
       activeUntil = 0;
+      exitOnlyUntil = 0; // Explicit kill switch stops all automated transactions.
       agentEvent('MANUAL_STOP', 'Stop über API ausgelöst');
       return reply(res, 200, { active: false, note: 'Gestoppt; ein bereits gesendeter Swap kann nicht rückgängig gemacht werden.' });
     }
