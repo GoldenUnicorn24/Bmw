@@ -48,6 +48,6 @@ Der autonome Echtgeld-Bot muss zusätzlich auf dem Server ausdrücklich mit ALLO
 - Keine privaten Schlüssel im Android-Client. Die App speichert den API-Token nur im Arbeitsspeicher.
 - Der HTTP-Server darf **niemals direkt** aus dem offenen Internet erreichbar sein.
 - Ein Stop über die App unter **KI-Bot -> NOT-AUS** stoppt weitere KI-Orders. Eine bereits eingereichte Blockchain-Transaktion ist nicht widerrufbar.
-- Einen laufenden Container kannst du zusätzlich mit **docker compose stop** anhalten. Bei bereits offenem Tokenbestand schützt das aber nicht vor Kursverlusten.
+- Im Container kann die permanente STOP-Sperre durch Anlegen von /app/private/STOP aktiviert werden. Einen laufenden Container kannst du zusätzlich mit **docker compose stop** anhalten. Bei bereits offenem Tokenbestand schützt das aber nicht vor Kursverlusten.
 - UNKNOWN oder SUBMITTED Trades blockieren automatisierte Neukäufe bis zur manuellen Klärung.
 - Ein separater GitHub-Zweig schützt die ursprüngliche BMW-Anwendung vor Änderungen.
