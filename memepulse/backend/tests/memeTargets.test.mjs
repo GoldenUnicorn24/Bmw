@@ -39,7 +39,7 @@ test('future discontinuity never becomes a made-up profit or interpolated candle
 test('training cannot use future targets as current entry features',()=>{
  const c=candles(120).map(x=>[x.time,x.open,x.high,x.low,x.close,x.volume]);
  const base=makeExamples('mint',c,{stride:1});
- const changed=c.map((row,i)=>i>26?[...row.slice(0,4),row[4]*1.1,row[5]]:row);
+ const changed=c.map((row,i)=>i>26?[row[0],row[1]*1.1,row[2]*1.1,row[3]*1.1,row[4]*1.1,row[5]]:row);
  const after=makeExamples('mint',changed,{stride:1});
  const x=base.find(r=>r.at===c[25][0]);
  const y=after.find(r=>r.at===c[25][0]);
