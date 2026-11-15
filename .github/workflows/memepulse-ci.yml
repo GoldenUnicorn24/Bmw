@@ -8,6 +8,7 @@ on:
       - feature/memepulse-v05-autopilot
       - feature/memepulse-v06-train-lab
       - feature/memepulse-v07-dual-market-research
+      - feature/memepulse-v08-meme-live-hardening
     paths:
       - "memepulse/**"
       - ".github/workflows/memepulse-ci.yml"
@@ -69,11 +70,11 @@ jobs:
         working-directory: memepulse/android
         run: gradle --no-daemon :app:assembleDebug
       - name: Prepare APK
-        run: cp memepulse/android/app/build/outputs/apk/debug/app-debug.apk MemePulseAI-Android-v0.7-debug.apk
+        run: cp memepulse/android/app/build/outputs/apk/debug/app-debug.apk MemePulseAI-Android-v0.8-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MemePulseAI-Android-v0.7-debug-APK
-          path: MemePulseAI-Android-v0.7-debug.apk
+          name: MemePulseAI-Android-v0.8-debug-APK
+          path: MemePulseAI-Android-v0.8-debug.apk
           retention-days: 30
 
   research-data:
