@@ -13,19 +13,21 @@ export function researchStatus(file){
     const r=JSON.parse(fs.readFileSync(file,'utf8'));
     const approved=false;
     const metric=(x)=>x&&typeof x==='object'?{
-      samples:Number(x.samples)||0,signals:Number(x.signals)||0,
+      samples:Number(x.samples ?? x.examples)||0,signals:Number(x.signals)||0,
       precision:Number.isFinite(x.precision)?x.precision:null,
-      meanNetPct:Number.isFinite(x.meanNetPct)?x.meanNetPct:null,
-      alwaysBuyMeanNetPct:Number.isFinite(x.alwaysBuyMeanNetPct)?x.alwaysBuyMeanNetPct:null,
-      brierScore:Number.isFinite(x.brierScore)?x.brierScore:null
+      meanNetPct:Number.isFinite(x.meanNetPct)?x.meanNetPct:Number.isFinite(x.averageNetPct)?x.averageNetPct:null,
+      alwaysBuyMeanNetPct:Number.isFinite(x.alwaysBuyMeanNetPct)?x.alwaysBuyMeanNetPct:Number.isFinite(x.alwaysBuyAverageNetPct)?x.alwaysBuyAverageNetPct:null,
+      brierScore:Number.isFinite(x.brierScore)?x.brierScore:Number.isFinite(x.brier)?x.brier:null
     }:null;
     return {status:String(r.status||'INVALID_REPORT'),liveInfluence:approved,
-      sampleCount:Number(r.provenance?.examples)||0,
-      source:String(r.provenance?.source||'unknown'),
-      asOf:String(r.provenance?.collectedAt||''),
+      sampleCount:Number(r.provenance?.examples ?? r.provenance?.qualifyingExamples ?? r.provenance?.trainingExamples)||0,
+      assetClass:String(r.assetClass||r.provenance?.assetClass||'NOT_CLASSIFIED'),
+      source:String(r.provenance?.source||r.provenance?.priceProvider||'unknown'),
+      asOf:String(r.provenance?.collectedAt||r.provenance?.selectedAt||''),
       counts:r.counts||null,
       metrics:{chronological:metric(r.metrics?.chronological),
-        unseenPools:metric(r.metrics?.unseenPools)},
+        unseenPools:metric(r.metrics?.unseenPools ?? r.metrics?.unseen),
+        later:metric(r.metrics?.later)},
       warning:'Research only; no model may authorize financial transactions'};
   }catch(e){return {...unknown,status:'REPORT_UNAVAILABLE',reason:String(e.message).slice(0,90)};}
 }
