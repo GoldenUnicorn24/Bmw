@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
 import crypto from 'node:crypto';
 import { Keypair, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
@@ -14,6 +15,18 @@ if (TOKEN.length < 32) throw Error('API_BEARER_TOKEN must be at least 32 charact
 const LIVE = env.ENABLE_LIVE_TRADES === 'YES_I_ACCEPT_REAL_LOSSES';
 const AUTO_ALLOWED = env.ALLOW_AUTONOMOUS_LIVE === 'YES_I_ACCEPT_AUTONOMOUS_LOSSES';
 const ALLOWLIST = new Set((env.TRADING_ALLOWLIST || '').split(',').map(x => x.trim()).filter(Boolean));
+const ALLOWLIST_FILE = env.ALLOWLIST_FILE || './private/allowlist.json';
+if (fs.existsSync(ALLOWLIST_FILE)) {
+  const persisted = JSON.parse(fs.readFileSync(ALLOWLIST_FILE, 'utf8'));
+  if (!Array.isArray(persisted)) throw Error('Allowlist-Datendatei ungültig');
+  for (const mint of persisted) { new PublicKey(String(mint)); ALLOWLIST.add(String(mint)); }
+}
+function persistAllowlist() {
+  fs.mkdirSync(path.dirname(ALLOWLIST_FILE), { recursive: true, mode: 0o700 });
+  const temp = ALLOWLIST_FILE + '.tmp';
+  fs.writeFileSync(temp, JSON.stringify([...ALLOWLIST], null, 2), { mode: 0o600 });
+  fs.renameSync(temp, ALLOWLIST_FILE);
+}
 const JUPITER_KEY = env.JUPITER_API_KEY || '';
 const GROK_KEY = env.XAI_API_KEY || '';
 const GROK_MODEL = env.XAI_MODEL || 'grok-4.7';
@@ -141,6 +154,13 @@ async function rugReport(mint) {
   const report = await jsonFetch('https://api.rugcheck.xyz/v1/tokens/' + encodeURIComponent(mint) + '/report/summary');
   const reasons = rugRejectReasons(report);
   return { score: Number(report.score_normalised), risks: report.risks || [], approved: !reasons.length, reasons };
+}
+async function allowlistCandidate(mint) {
+  new PublicKey(mint);
+  if (mint === WSOL) throw Error('SOL selbst ist kein Meme-Coin-Kandidat');
+  const [market, safety] = await Promise.all([marketFor(mint), rugReport(mint)]);
+  const reasons = [...marketRejectReasons(market, 75), ...safety.reasons];
+  return { mint, market, safety, reasons, approved: reasons.length === 0 };
 }
 function assertCanTrade() {
   if (!LIVE) throw Error('Echtgeldhandel ist serverseitig deaktiviert');
@@ -409,6 +429,28 @@ const server = http.createServer(async (req, res) => {
     });
     if (req.method !== 'POST') return reply(res, 404, { error: 'Route nicht gefunden' });
     const body = await readBody(req);
+    if (url.pathname === '/api/allowlist/check') {
+      return reply(res, 200, await allowlistCandidate(String(body.mint || '')));
+    }
+    if (url.pathname === '/api/allowlist/add') {
+      const mint = String(body.mint || '');
+      if (body.confirm !== 'I REVIEWED THIS TOKEN: ' + mint) throw Error('Explizite Token-Freigabe fehlt');
+      const result = await allowlistCandidate(mint);
+      if (!result.approved) throw Error('Risiko-Check abgelehnt: ' + result.reasons.join('; '));
+      if (ALLOWLIST.size >= 8 && !ALLOWLIST.has(mint)) throw Error('Maximal acht Tokens in der Bot-Allowlist');
+      ALLOWLIST.add(mint);
+      persistAllowlist();
+      agentEvent('TOKEN_APPROVED', mint.slice(0, 12));
+      return reply(res, 200, { approved: true, mint, total: ALLOWLIST.size });
+    }
+    if (url.pathname === '/api/allowlist/remove') {
+      const mint = String(body.mint || '');
+      if (body.confirm !== 'REMOVE TOKEN: ' + mint) throw Error('Explizite Token-Entfernung fehlt');
+      const removed = ALLOWLIST.delete(mint);
+      if (removed) persistAllowlist();
+      agentEvent('TOKEN_REMOVED', mint.slice(0, 12));
+      return reply(res, 200, { removed, total: ALLOWLIST.size });
+    }
     if (url.pathname === '/api/ai/signal') {
       const mint = String(body.mint || '');
       new PublicKey(mint);
