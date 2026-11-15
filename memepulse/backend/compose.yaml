@@ -8,6 +8,7 @@ services:
       HOST: "0.0.0.0"
       PORT: "8787"
       TRADE_LOG_PATH: "/app/private/trades.json"
+      STOP_FILE: "/app/private/STOP"
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
