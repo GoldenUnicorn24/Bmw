@@ -45,12 +45,12 @@ export function analyzeMarket(t) {
   score += age >= 240 ? 10 : age >= 120 ? 8 : age >= 60 ? 5 : 0;
   score = clamp(score, 0, 100);
 
-  const passed = blockers.length === 0 && score >= 82;
+  const passed = blockers.length === 0 && score >= 85;
   let reason = passed
     ? 'Trend über 5m/1h/6h bestätigt; Kaufdruck und Liquidität innerhalb der Schwellen.'
     : blockers.length
       ? 'Kein Kauf: ' + blockers.join(', ')
-      : 'Kein Kauf: Signalstärke unter 82/100.';
+      : 'Kein Kauf: Signalstärke unter 85/100.';
   return {
     action: passed ? 'BUY' : 'HOLD', mint: String(t.mint),
     confidence: round(score / 100), score, eligible: passed,
