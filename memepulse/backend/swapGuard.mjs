@@ -55,6 +55,14 @@ export function inspectSwapTransaction(tx,signer,order){
   return {payer:signer.toBase58(),version:0,signerCount:1,
     instructionCount:m.compiledInstructions.length,additionalAccounts:m.addressTableLookups?.length||0};
 }
+export function validateSwapSimulation(sim){
+  if(!sim||!sim.value||sim.value.err!==null)
+    throw Error('RPC swap simulation did not succeed; refusing live broadcast');
+  const units=Number(sim.value.unitsConsumed);
+  if(!Number.isFinite(units)||units<=0||units>1400000)
+    throw Error('RPC swap simulation compute budget invalid');
+  return {simulated:true,unitsConsumed:units};
+}
 export function checkJupiterExecution(result,tx,order,{maxSlippageBps=100}={}){
   const expectedSig=toSignature(tx?.signatures?.[0]||[]);
   if(!expectedSig||expectedSig==='11111111111111111111111111111111')
