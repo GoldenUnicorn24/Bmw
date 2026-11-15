@@ -85,6 +85,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Restore previous strictly public historical candle cache
+        uses: actions/cache@v4
+        with:
+          path: memepulse/backend/research-output/dataset.json
+          key: memepulse-research-v06-${{ github.run_id }}
+          restore-keys: |
+            memepulse-research-v06-
       - name: Fetch real Solana OHLCV and train research-only shadow model
         working-directory: memepulse/backend
         env:
