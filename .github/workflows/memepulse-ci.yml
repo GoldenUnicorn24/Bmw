@@ -8,6 +8,9 @@ on:
       - "memepulse/**"
       - ".github/workflows/memepulse-ci.yml"
   workflow_dispatch:
+concurrency:
+  group: memepulse-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
