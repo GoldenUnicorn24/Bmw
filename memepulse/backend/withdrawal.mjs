@@ -7,6 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {PublicKey,Transaction,SystemProgram} from '@solana/web3.js';
 import bs58 from 'bs58';
+import {saveDurableJournal,loadJournal} from './durableJournal.mjs';
 export const SOL_MAINNET_GENESIS='5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 const compare=(a,b)=>{
  const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));
@@ -31,22 +32,14 @@ export function planWithdrawal({amountSol,balanceLamports,destination,from,maxLa
  return {amountLamports:lamports,destination:key.toBase58(),from,
    expectedRemainingLamports:available-lamports};
 }
-function writeAtomic(file,data){
- const folder=path.dirname(file);fs.mkdirSync(folder,{recursive:true,mode:0o700});
- const temp=file+'.'+process.pid+'.tmp';
- fs.writeFileSync(temp,JSON.stringify(data.slice(-300),null,2),{mode:0o600});
- fs.renameSync(temp,file);
-}
+function writeAtomic(file,data){saveDurableJournal(file,data)}
 export function createWithdrawalService({env,signer,rpc,balanceSol,busy,otherActivity}){
  const enabled=env.ENABLE_WALLET_WITHDRAWALS==='YES_I_ACCEPT_RESTRICTED_SOL_WITHDRAWALS';
  const token=env.WITHDRAWAL_SECOND_FACTOR||'';
  const target=env.WITHDRAWAL_DESTINATION_B58||'';
  const maxSol=Number(env.MAX_WITHDRAWAL_SOL||'.25');
  const journalPath=env.WITHDRAWAL_LOG_PATH||'./private/withdrawals.json';
- let journal=[];
- try{journal=JSON.parse(fs.readFileSync(journalPath,'utf8'));
-  if(!Array.isArray(journal))throw Error('bad journal');
- }catch(e){if(e.code!=='ENOENT')throw Error('Withdrawal journal invalid: '+e.message);}
+ let journal=loadJournal(journalPath);
  const transactions=journal;
  let prepared=new Map(),inFlight=false;
  const uncertain=()=>transactions.some(x=>['SUBMITTED','UNKNOWN'].includes(x.status));
