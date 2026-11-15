@@ -44,6 +44,9 @@ export function checkJupiterMessage(tx,{wallet,allowedProgramIds,maxInputLamport
     fail('UNEXPECTED_ADDITIONAL_SIGNER');
   if(!m.staticAccountKeys?.[0]?.equals(owner))
     fail('HOT_WALLET_MUST_BE_SOLE_FEE_PAYER');
+  // Lookup tables can silently introduce writable accounts not visible in staticAccountKeys.
+  // Until audited account-by-account resolution is implemented, reject ALL ALT-bearing routes.
+  if(!Array.isArray(m.addressTableLookups)||m.addressTableLookups.length>0)fail('ADDRESS_LOOKUP_TABLE_NOT_AUDITED');
   if(!Array.isArray(m.compiledInstructions)||m.compiledInstructions.length===0)
     fail('NO_SWAP_INSTRUCTIONS');
   if(m.compiledInstructions?.length>30)fail('TOO_MANY_INSTRUCTIONS');
@@ -51,6 +54,9 @@ export function checkJupiterMessage(tx,{wallet,allowedProgramIds,maxInputLamport
   const recipient=wsolAssociatedAddress(owner);
   const available=BigInt(maxInputLamports||0);
   let priceMicro=0n,computeUnits=200_000;
+  let nativeSolSpent=0n;
+  const reviewablePrograms=new Set([SystemProgram.programId.toBase58(),COMPUTE_PROGRAM.toBase58(),
+    TOKEN_PROGRAM.toBase58(),TOKEN2022_PROGRAM.toBase58(),ASSOCIATED_PROGRAM.toBase58()]);
   const allowedMints=new Set([WSOL.toBase58(),new PublicKey(orderMint).toBase58()]);
   for(const ins of m.compiledInstructions||[]){
     const prog=keys[ins.programIdIndex];
@@ -58,6 +64,9 @@ export function checkJupiterMessage(tx,{wallet,allowedProgramIds,maxInputLamport
     if(!prog){fail('DYNAMIC_PROGRAM_UNREVIEWED');continue;}
     const id=prog.toBase58(),data=Buffer.from(ins.data);
     if(!allowed.has(id)){fail('PROGRAM_NOT_REVIEWED:'+id);continue;}
+    // An approved program ID is necessary, never by itself sufficient for arbitrary
+    // instruction payloads. Unknown programs need external on-chain instruction review.
+    if(!reviewablePrograms.has(id))fail('EXTERNAL_PROGRAM_INSTRUCTION_REQUIRES_AUDIT:'+id);
     const accounts=Array.from(ins.accountKeyIndexes||[]).map(i=>keys[i]||null);
     if(id===SystemProgram.programId.toBase58()){
       if(accounts.some(a=>!a)){fail('UNRESOLVED_SYSTEM_ACCOUNT');continue;}
@@ -66,6 +75,8 @@ export function checkJupiterMessage(tx,{wallet,allowedProgramIds,maxInputLamport
         const type=SystemInstruction.decodeInstructionType(decoded);
         if(type!=='Transfer'){fail('UNREVIEWED_SYSTEM_INSTRUCTION:'+type);continue;}
         const {fromPubkey,toPubkey,lamports}=SystemInstruction.decodeTransfer(decoded);
+        nativeSolSpent+=BigInt(lamports);
+        if(nativeSolSpent>available)fail('AGGREGATE_SOL_INPUT_OVER_BUDGET');
         if(!fromPubkey.equals(owner)||!toPubkey.equals(recipient)||
           BigInt(lamports)>available||BigInt(lamports)<=0n)
           fail('UNTRUSTED_NATIVE_SOL_TRANSFER');
@@ -86,7 +97,8 @@ export function checkJupiterMessage(tx,{wallet,allowedProgramIds,maxInputLamport
       // SetAuthority(6), Approve(4), MintTo(7), FreezeAccount(10) etc prohibited.
       // TransferChecked(12) carries a mint argument and is auditable.
       const opcode=data[0];
-      const safe=new Set([1,9,12,16,17,18]);
+      // Never silently permit opcodes with account metas we cannot yet validate.
+      const safe=new Set([9,12]);
       if(!safe.has(opcode))fail('UNREVIEWED_TOKEN_INSTRUCTION:'+opcode);
       if(opcode===12){
         if(!accounts[1]||!allowedMints.has(accounts[1].toBase58()))
@@ -104,6 +116,9 @@ export function checkJupiterMessage(tx,{wallet,allowedProgramIds,maxInputLamport
          fail('UNREVIEWED_ATA_INSTRUCTION');
     }
   }
+  if(!m.compiledInstructions?.some(i=>keys[i.programIdIndex]?.equals(SystemProgram.programId)||
+      keys[i.programIdIndex]?.equals(TOKEN_PROGRAM)||keys[i.programIdIndex]?.equals(TOKEN2022_PROGRAM)))
+    fail('NO_ASSET_MOVEMENT_INSTRUCTIONS');
   // Aggregate estimated priority fee, not a guarantee of actual network fee.
   if(BigInt(computeUnits)*priceMicro/1_000_000n>1_000_000n)
     fail('PRIORITY_FEE_OVER_0_001_SOL');
