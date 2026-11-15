@@ -389,6 +389,7 @@ private fun Positions(s: MemeStore) {
 }
 @Composable
 private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
+    var showResumeConfirm by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         StatusRibbons(s)
@@ -460,11 +461,33 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
                 OutlinedButton(onClick = { s.stopAgent() }, enabled = !s.requesting, modifier = Modifier.fillMaxWidth()) {
                     Text("■ NOT-AUS: Auto-Bot stoppen", color = Red)
                 }
-                Caption("Zusätzlicher Not-Aus: STOP-Datei auf dem Server anlegen.", color = Muted)
+                Caption("Not-Aus unten blockiert ALLE neuen Swaps dauerhaft; KI-Abbruch allein beendet nur die laufende Sitzung.", color = Muted)
+            }
+        }
+        SectionHeader("Sicherheitszentrale", "GLOBALER NOT-AUS")
+        Surface(color = Panel2, shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(if (s.serverStatus?.optBoolean("stopped") == true) "■ ECHTGELD-HANDEL IST GESPERRT" else "Neue Transaktionen können über das Backend zugelassen sein.",
+                    color = Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Button(onClick = { s.emergencyStop() }, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Red)) {
+                    Text("■ NOT-AUS – ALLE LIVE-TRADES SPERREN", color = Background, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                if (s.serverStatus?.optBoolean("stopped") == true) {
+                    OutlinedButton(onClick = { showResumeConfirm = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Echtgeldhandel nach Prüfung entsperren", color = White, fontSize = 12.sp)
+                    }
+                }
+                Text("Eine bereits an die Blockchain gesendete Order kann nicht rückgängig gemacht werden.", color = Muted, fontSize = 11.sp)
             }
         }
         Hint("Meme-Coins sind hochspekulativ. Keine KI kann einen Gewinn garantieren. Die Marktmetrik ist kein unabhängiges Sicherheits-Audit.")
     }
+    if (showResumeConfirm) AlertDialog(onDismissRequest = { showResumeConfirm = false },
+        title = { Text("Echtgeldhandel wieder entsperren?") },
+        text = { Text("Nur nach Prüfung der Wallet, aller offenen Positionen und unklaren Trades. Die KI-Automatik wird dabei nicht aktiviert.") },
+        confirmButton = { Button(onClick = { showResumeConfirm = false; s.emergencyResume() }) { Text("Manuelle Live-Trades entsperren") } },
+        dismissButton = { TextButton(onClick = { showResumeConfirm = false }) { Text("Abbrechen") } })
 }
 @Composable
 private fun Metric(label: String, value: String, color: Color) {
