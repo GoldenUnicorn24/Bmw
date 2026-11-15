@@ -318,8 +318,9 @@ async function scanAndExplain(mint) {
   }
 }
 function currentPerformance() {
-  const realized = confirmedPositions(journal).realized.map(x =>
-    ({ pnlSol: Number(BigInt(x.pnlSolAtomic)) / 1e9 })).slice(-200);
+  const realized = confirmedPositions(journal).realized
+    .filter(x=>x.source==='BOT_EXIT')
+    .map(x => ({ pnlSol: Number(BigInt(x.pnlSolAtomic)) / 1e9 })).slice(-200);
   return strategyHealth(realized);
 }
 async function agentCycle() {
