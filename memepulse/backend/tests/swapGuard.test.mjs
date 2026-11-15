@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   Keypair, PublicKey, SystemProgram, ComputeBudgetProgram,
-  TransactionMessage, TransactionInstruction, VersionedTransaction
+  TransactionMessage, TransactionInstruction, VersionedTransaction, AddressLookupTableAccount
 } from '@solana/web3.js';
 import {checkJupiterMessage,verifiedProgramIds,wsolAssociatedAddress} from '../swapGuard.mjs';
 
@@ -67,4 +67,37 @@ test('Token transferChecked cannot approve another mint or grant authority',()=>
      {pubkey:wrongMint,isSigner:false,isWritable:false}],
    data:Buffer.from([12,1,0,0,0,0,0,0,0,9])});
  assert.ok(testGuard(build([ins])).reasons.includes('TOKEN_TRANSFER_MINT_MISMATCH'));
+});
+
+test('lookup table with dynamic writable accounts is always rejected before signing',()=>{
+ const lookup=new AddressLookupTableAccount({
+   key:Keypair.generate().publicKey,
+   state:{deactivationSlot:18446744073709551615n,lastExtendedSlot:0,
+     lastExtendedSlotStartIndex:0,authority:wallet.publicKey,addresses:[attacker]}
+ });
+ const dynamic=new VersionedTransaction(new TransactionMessage({
+   payerKey:wallet.publicKey,recentBlockhash:blockhash,
+   instructions:[SystemProgram.transfer({fromPubkey:wallet.publicKey,toPubkey:attacker,lamports:1000000})]
+ }).compileToV0Message([lookup]));
+ assert.ok(dynamic.message.addressTableLookups.length>0);
+ const result=testGuard(dynamic);
+ assert.equal(result.approved,false);
+ assert.ok(result.reasons.includes('ADDRESS_LOOKUP_TABLE_NOT_AUDITED'));
+});
+test('two independently valid SOL instructions cannot exceed combined budget',()=>{
+ const recipient=wsolAssociatedAddress(wallet.publicKey);
+ const tx=build([
+   SystemProgram.transfer({fromPubkey:wallet.publicKey,toPubkey:recipient,lamports:32000000}),
+   SystemProgram.transfer({fromPubkey:wallet.publicKey,toPubkey:recipient,lamports:32000000})
+ ]);
+ const result=testGuard(tx);
+ assert.equal(result.approved,false);
+ assert.ok(result.reasons.includes('AGGREGATE_SOL_INPUT_OVER_BUDGET'));
+});
+test('unknown externally approved DEX program is still denied pending instruction audit',()=>{
+ const dex=Keypair.generate().publicKey;
+ const tx=build([new TransactionInstruction({programId:dex,keys:[],data:Buffer.from([1,2,3])})]);
+ const result=testGuard(tx,{allowedProgramIds:new Set([...allowed,dex.toBase58()])});
+ assert.equal(result.approved,false);
+ assert.ok(result.reasons.some(x=>x.startsWith('EXTERNAL_PROGRAM_INSTRUCTION_REQUIRES_AUDIT')));
 });
