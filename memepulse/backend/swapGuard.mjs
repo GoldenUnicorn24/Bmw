@@ -1,15 +1,20 @@
 // Jupiter v2 live-order defence-in-depth. All checks fail closed.
 // These are NOT a substitute for an independent transaction-program audit.
 import bs58 from 'bs58';
-import {SystemProgram, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID} from '@solana/web3.js';
+import {SystemProgram, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,PublicKey} from '@solana/web3.js';
+const WSOL=new PublicKey('So11111111111111111111111111111111111111112');
+const ATA_PROGRAM=new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+const associatedWsol=(wallet)=>PublicKey.findProgramAddressSync(
+  [wallet.toBuffer(),TOKEN_PROGRAM_ID.toBuffer(),WSOL.toBuffer()],ATA_PROGRAM)[0];
 
 const strictAtomic=(v,label)=>{
   if(!/^[0-9]{1,32}$/.test(String(v??'')))throw Error(label+' missing/invalid');
   const n=BigInt(v);if(n<=0n)throw Error(label+' must be > 0');return n;
 };
 const toSignature=(b)=>bs58.encode(Buffer.from(b));
-export function inspectSwapTransaction(tx,signer){
-  if(!tx?.message||!tx?.signatures||!signer)throw Error('Missing versioned swap transaction/signer');
+export function inspectSwapTransaction(tx,signer,order){
+  if(!tx?.message||!tx?.signatures||!signer||!order)
+    throw Error('Missing swap transaction, signer or approved order intent');
   const m=tx.message;
   if(m.version!==0)throw Error('Only audited v0 transaction envelope is supported');
   const keys=m.staticAccountKeys||[];
@@ -25,12 +30,17 @@ export function inspectSwapTransaction(tx,signer){
     if(!program)throw Error('Cannot independently identify a swap program id');
     if(program.equals(SystemProgram.programId)){
       const data=Buffer.from(ix.data||[]);
-      if(data.length<4)throw Error('Malformed SystemProgram instruction');
-      const op=data.readUInt32LE(0);
-      // A native transfer can redirect wallet SOL to an arbitrary payee. Account
-      // creation is permitted; direct transfers/seed transfers are not.
-      if([2,11].includes(op))throw Error('Direct native SOL transfers in swap are forbidden');
-      if(![0,3,8,9].includes(op))throw Error('SystemProgram operation not permitted for swap');
+      if(data.length!==12||data.readUInt32LE(0)!==2)
+        throw Error('Only exact native SOL -> own wrapped-SOL ATA transfers are permitted');
+      const from=keys[ix.accountKeyIndexes?.[0]];
+      const to=keys[ix.accountKeyIndexes?.[1]];
+      const lamports=data.readBigUInt64LE(4);
+      const allowed=BigInt(order.amountLamports||'0');
+      // Only BUY may wrap native SOL, only into the deterministic WSOL ATA
+      // controlled by the same signer, never to arbitrary tip/fee accounts.
+      if(order.side!=='BUY'||!from?.equals(signer)||!to?.equals(associatedWsol(signer))||
+        lamports<=0n||lamports>allowed)
+        throw Error('Direct native SOL transfers in swap are forbidden except capped own WSOL wrapping');
     }
     if(program.equals(TOKEN_PROGRAM_ID)||program.equals(TOKEN_2022_PROGRAM_ID)){
       const op=Number(Buffer.from(ix.data||[])[0]);
