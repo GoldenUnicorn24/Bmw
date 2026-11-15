@@ -88,6 +88,7 @@ class MemeStore(context: Context) {
     var depositReady by mutableStateOf(false)
     var strategyHealth by mutableStateOf<JSONObject?>(null)
     var researchReport by mutableStateOf<JSONObject?>(null)
+    var marketResearchReport by mutableStateOf<JSONObject?>(null)
     var botRisk by mutableStateOf<JSONObject?>(null)
     private val simulatedInitial = 1000.0
     private val marketHistory = mutableMapOf<String, MutableList<MarketProbe>>()
@@ -547,8 +548,14 @@ class MemeStore(context: Context) {
         thread {
             try {
                 val status = backend("/api/research/status")
-                main.post { researchReport = status }
-            } catch (_: Exception) { }
+                val split = backend("/api/research/markets")
+                main.post {
+                    researchReport = status
+                    marketResearchReport = split
+                }
+            } catch (_: Exception) {
+                // Older servers may expose only the legacy research report.
+            }
         }
     }
     fun refreshRemoteBot() {
