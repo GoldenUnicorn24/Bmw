@@ -31,7 +31,7 @@ private val white = Color(0xFFF7F9FF)
 
 @Composable
 fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
-    val grok = s.serverStatus?.optBoolean("grokConnected") == true
+    val engineReady = s.serverStatus?.optBoolean("engineConnected") == true
     val live = s.serverStatus?.optBoolean("live") == true
     val auto = s.serverStatus?.optBoolean("autoActive") == true
     val autoAllowed = s.serverStatus?.optBoolean("autoAllowed") == true
@@ -45,24 +45,25 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 MiniLabel("◈   AI ENGINE / CONTROL CENTER", bright)
-                MiniLabel("v0.3  BETA", secondary)
+                MiniLabel("v0.4  BETA", secondary)
             }
             Spacer(Modifier.height(1.dp))
             Text("Trade smarter.", color = white, fontSize = 30.sp, fontWeight = FontWeight.Black, lineHeight = 34.sp)
-            Text("Analyse durch Grok · Schutzregeln im Server · keine Gewinngarantie",
+            Text("Eigene Quant-Engine · keine Modell-API · keine Gewinngarantie",
                 color = secondary, fontSize = 12.sp, lineHeight = 17.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                StatusPill(if (grok) "● GROK VERBUNDEN" else "○ GROK OFFLINE", if (grok) mint else secondary)
-                StatusPill(if (s.realMarket) "● LIVE-MARKT" else "○ DEMO", if (s.realMarket) mint else bright)
+                StatusPill(if (engineReady) "● ENGINE / SERVER" else "● ENGINE / GERÄT", if (engineReady) mint else bright)
+                StatusPill(if (s.realMarket) "● LIVE-MARKT" else "○ KURSE FEHLEN", if (s.realMarket) mint else bright)
             }
         }
+        if (s.paperMode) {
         Text("01   KI-PAPER-TRADING", color = white, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 0.6.sp)
         Surface(color = tile, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
-                        Text("Grok Paper Bot", color = white, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                        Text("MemePulse Paper Bot", color = white, fontWeight = FontWeight.Bold, fontSize = 19.sp)
                         Text(if (s.paperBotEnabled) "Automatische simulierte Trades laufen"
                             else "Echtgeldfrei Strategien testen", color = secondary, fontSize = 11.sp)
                     }
@@ -75,22 +76,23 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                     BotMetric("STOP-LOSS", "−12 %", Modifier.weight(1f))
                     BotMetric("TAKE-PROFIT", "+25 %", Modifier.weight(1f))
                 }
-                Text("Pro Kauf: AI-Signal von Grok, aktueller DEX-Kurs und serverseitiger RugCheck-Filter erforderlich. Höchstens drei offene Paper-Positionen. Die App handelt nur, solange sie aktiv ist.",
+                Text("Jeder simulierte Kauf benötigt ein positives internes Quant-Signal und eine aktuelle RugCheck-Prüfung. Maximal drei Positionen und drei Käufe pro Tag. Der Bot läuft nur bei aktiver App.",
                     color = secondary, fontSize = 11.sp, lineHeight = 16.sp)
                 Button(onClick = { s.togglePaperBot() }, modifier = Modifier.fillMaxWidth().height(48.dp),
-                    enabled = s.paperBotEnabled || (grok && s.realMarket && !s.marketLoading),
+                    enabled = s.paperBotEnabled || (s.realMarket && !s.marketLoading),
                     colors = ButtonDefaults.buttonColors(containerColor = if (s.paperBotEnabled) tile2 else mint),
                     shape = RoundedCornerShape(15.dp)) {
                     Text(if (s.paperBotEnabled) "■  PAPER-BOT STOPPEN" else "▶  KI-PAPER-BOT STARTEN",
                         color = if (s.paperBotEnabled) white else ink, fontWeight = FontWeight.Bold)
                 }
-                if (!grok) Text("Verbinde zuerst im System-Tab deinen Grok-Server. Ohne API gibt es bewusst keine vorgetäuschten KI-Käufe.",
-                    color = bright, fontSize = 11.sp)
-                if (!s.realMarket) Text("Im Radar zuerst echte Kurse abrufen; Demo-Coins werden vom KI-Bot ignoriert.",
+                Text("Die Signal-Engine läuft ohne externen KI-Anbieter.", color = mint, fontSize = 11.sp)
+                if (!s.realMarket) Text("Im Radar zuerst echte Kurse abrufen. Ohne Kursdaten gibt es keine Order.",
                     color = bright, fontSize = 11.sp)
             }
         }
-        Text("02   LIVE-TRADING-SERVER", color = white, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = .6.sp)
+        }
+        if (!s.paperMode) {
+        Text("01   LIVE-TRADING-SERVER", color = white, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = .6.sp)
         Surface(color = tile, shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
@@ -117,7 +119,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
                 Text("Sicherheit: Nur freigegebene Mint-Adressen, Handelslimits und zeitlich begrenzte Aktivierung. Stop-Loss ist nicht garantiert. Nach Session-Ende läuft keine automatische Verkaufsüberwachung weiter.",
                     color = secondary, fontSize = 11.sp, lineHeight = 16.sp)
-                Button(onClick = onAutoConfirm, enabled = autoAllowed && live && grok && !auto && !s.requesting,
+                Button(onClick = onAutoConfirm, enabled = autoAllowed && live && engineReady && !auto && !s.requesting,
                     modifier = Modifier.fillMaxWidth().height(47.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = danger),
                     shape = RoundedCornerShape(15.dp)) {
@@ -131,10 +133,12 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
             }
         }
-        Text("03   BOT-AKTIVITÄTEN", color = white, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = .6.sp)
+        }
+        Text("02   BOT-AKTIVITÄTEN", color = white, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = .6.sp)
         Surface(color = tile, shape = RoundedCornerShape(19.dp)) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                MiniLabel("PAPER · GROK SIGNALS", bright)
+                if (s.paperMode) {
+                MiniLabel("PAPER · NATIVE SIGNALS", bright)
                 if (s.paperBotEvents.isEmpty()) {
                     Text("Noch keine Paper-Bot-Entscheidungen.", color = secondary, fontSize = 12.sp)
                 } else {
@@ -146,7 +150,8 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                         }
                     }
                 }
-                HorizontalDivider(color = Color(0xFF28344D))
+                }
+                if (!s.paperMode) {
                 MiniLabel("ECHTGELD · SERVER-EVENTS", danger)
                 if (s.agentEvents.isEmpty()) Text("Keine Live-Bot-Events geladen.", color = secondary, fontSize = 12.sp)
                 else s.agentEvents.take(8).forEach { e ->
@@ -158,6 +163,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                             Text(e.optString("details"), color = secondary, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
+                }
                 }
             }
         }
