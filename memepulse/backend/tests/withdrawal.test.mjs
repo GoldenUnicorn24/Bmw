@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import bs58 from 'bs58';
-import {Keypair,Transaction,SystemProgram} from '@solana/web3.js';
+import {Keypair,PublicKey,Transaction,SystemProgram} from '@solana/web3.js';
 import {planWithdrawal,createWithdrawalService,SOL_MAINNET_GENESIS} from '../withdrawal.mjs';
 const secret='w'.repeat(40);
 const wallet=Keypair.generate();
@@ -22,7 +22,7 @@ test('withdrawal restrictions reject empty destination, overspending, off-curve/
   maxLamports:500000000n,minReserveLamports:20000000n,
   from:wallet.publicKey.toBase58(),destination}),/enough/);
  assert.throws(()=>planWithdrawal({amountSol:.01,balanceLamports:1000000000n,
-  from:wallet.publicKey.toBase58(),destination:'11111111111111111111111111111111'}),/on-curve/);
+  from:wallet.publicKey.toBase58(),destination:PublicKey.findProgramAddressSync([Buffer.from('withdrawal')],SystemProgram.programId)[0].toBase58()}),/on-curve/);
  const p=planWithdrawal({amountSol:.01,balanceLamports:1000000000n,
   from:wallet.publicKey.toBase58(),destination});
  assert.equal(p.amountLamports,10_000_000n);
