@@ -263,7 +263,13 @@ private fun Radar(s: MemeStore) {
             color = Muted, fontSize = 11.sp)
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
-            label = { Text("Coin oder Mint-Adresse suchen") }, singleLine = true)
+            label = { Text("Coin / Solana Mint-Adresse") }, singleLine = true)
+        if (Regex("^[1-9A-HJ-NP-Za-km-z]{32,44}$").matches(query.trim())) {
+            OutlinedButton(onClick = { s.lookupMint(query) }, enabled = !s.marketLoading,
+                modifier = Modifier.fillMaxWidth()) {
+                Text("⌕ Diese Mint-Adresse direkt bei DEX Screener prüfen", fontSize = 11.sp)
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = minScore, onCheckedChange = { minScore = it })
             Text("Nur Markt-Score ≥ 75", color = White, fontSize = 12.sp)
