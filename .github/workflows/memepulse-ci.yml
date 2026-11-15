@@ -17,6 +17,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install backend dependencies and verify JS syntax
+        working-directory: memepulse/backend
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          node --check server.mjs
+          node --check risk.mjs
       - name: Run backend regression tests
         working-directory: memepulse/backend
         run: npm test
