@@ -1,3 +1,7 @@
+# Bitte zuerst die aktuelle v0.9-Abnahme lesen
+
+Die vollständige, aktuell maßgebliche Echtgeld-Einrichtungs- und Sicherheitsanleitung steht in **ABNAHME-REALGELD-DE.md**. Die nachfolgende v0.6-Anleitung enthält ältere Bildschirmtexte. Echtgeldbetrieb und autonome Ausführung sind weiterhin NICHT freigegeben.
+
 # MemePulse AI v0.6 – Autopilot 2 auf Android einrichten
 
 ## Neu in v0.6: Autopilot 2 und eigene Einzahlungsadresse
