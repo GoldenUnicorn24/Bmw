@@ -489,7 +489,7 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
                 val checks = result?.optJSONArray("checks")
                 if (checks != null) {
-                    Caption("${result.optInt("checksPassed")}/${result.optInt("checkCount")} Prüfungen bestanden",
+                    Caption("${result?.optInt("checksPassed") ?: 0}/${result?.optInt("checkCount") ?: 0} Prüfungen bestanden",
                         color = Muted)
                     for (i in 0 until checks.length()) {
                         val row = checks.optJSONObject(i) ?: continue
@@ -518,10 +518,10 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
                     color = if (status?.optBoolean("enabled") == true) Green else Muted,
                     fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 if (status?.optBoolean("enabled") == true) {
-                    Caption("Zieladresse: " + status.optString("destination", "Keine Adresse"),
+                    Caption("Zieladresse: " + (status?.optString("destination", "Keine Adresse") ?: "Keine Adresse"),
                         color = Muted)
                     Caption("Serverlimit je Überweisung: " +
-                        status.optDouble("maxWithdrawalSol", 0.0) + " SOL", color = Muted)
+                        (status?.optDouble("maxWithdrawalSol", 0.0) ?: 0.0) + " SOL", color = Muted)
                     OutlinedTextField(s.withdrawalAmount,
                         onValueChange = { s.withdrawalAmount = it },
                         label = { Text("Rücküberweisung in SOL") },
@@ -534,7 +534,7 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Button(onClick = { s.prepareWithdrawal() },
                         enabled = !s.requesting && !s.paperMode && s.withdrawalFactor.length >= 32 &&
-                            status.optBoolean("signerReady") && !status.optBoolean("pendingReconciliation"),
+                            (status?.optBoolean("signerReady") == true) && status?.optBoolean("pendingReconciliation") != true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = Violet)) {
                         Text("Verbindliche Auszahlungsvorschau prüfen", color = Background)
