@@ -53,7 +53,7 @@ export function exitSignal(entryPriceUsd, currentPriceUsd, stopLossPct = 12, tak
   return null;
 }
 export function shouldHaltForUnknown(journal) {
-  return journal.some(x => x.status === 'UNKNOWN');
+  return journal.some(x => x.status === 'UNKNOWN' || x.status === 'SUBMITTED');
 }
 export function safetyStatus(journal, maxRealizedDailyLossSol, now = Date.now()) {
   const pnlAtomic = realizedTodayAtomic(journal, now);
@@ -61,8 +61,9 @@ export function safetyStatus(journal, maxRealizedDailyLossSol, now = Date.now())
   return {
     dailyRealizedPnlSol: Number(pnlAtomic) / 1e9,
     lossLimitSol: maxRealizedDailyLossSol,
-    halted: shouldHaltForUnknown(journal) || (limit > 0n && pnlAtomic <= -limit),
-    reasons: [...(shouldHaltForUnknown(journal) ? ['Unklare Blockchain-Transaktion zuerst manuell prüfen'] : []),
+    halted: shouldHaltForUnknown(journal) || journal.some(t => t.status === 'SUCCESS' && (!/^\d+$/.test(String(t.actualInputAtomic)) || !/^\d+$/.test(String(t.actualOutputAtomic)))) || (limit > 0n && pnlAtomic <= -limit),
+    reasons: [...(shouldHaltForUnknown(journal) ? ['Ungeklärte Blockchain-Transaktion zuerst manuell prüfen'] : []),
+      ...(journal.some(t => t.status === 'SUCCESS' && (!/^\d+$/.test(String(t.actualInputAtomic)) || !/^\d+$/.test(String(t.actualOutputAtomic)))) ? ['Fehlende Ausführungsbeträge im Ledger – keine Automatik'] : []),
       ...(limit > 0n && pnlAtomic <= -limit ? ['Täglicher realisierter Verlustgrenzwert überschritten'] : [])]
   };
 }
