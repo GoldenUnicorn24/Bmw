@@ -48,7 +48,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 MiniLabel("◈   AI ENGINE / CONTROL CENTER", bright)
-                MiniLabel("v0.7  DUAL RESEARCH", secondary)
+                MiniLabel("v0.8  LIVE SAFETY LAB", secondary)
             }
             Spacer(Modifier.height(1.dp))
             Text("Trade smarter.", color = white, fontSize = 30.sp, fontWeight = FontWeight.Black, lineHeight = 34.sp)
@@ -113,6 +113,13 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
                 BotLine("Server Live-Trading", if (live) "FREIGEGEBEN" else "AUS", if (live) danger else mint)
                 BotLine("KI-Automatik", if (autoAllowed) "KONFIGURIERT" else "AUS", if (autoAllowed) danger else mint)
+                s.serverStatus?.optJSONObject("liveReadiness")?.let { safety ->
+                    BotLine("Swap-Preflight", if (safety.optBoolean("preflightSimulationRequired")) "ERZWUNGEN" else "NICHT BESTÄTIGT",
+                        if (safety.optBoolean("preflightSimulationRequired")) mint else danger)
+                    BotLine("Blockchain-Beleg", if (safety.optBoolean("independentRpcReceiptRequired")) "ERFORDERLICH" else "NICHT BESTÄTIGT",
+                        if (safety.optBoolean("independentRpcReceiptRequired")) mint else danger)
+                    BotLine("Unabhängiger Sicherheits-Audit", "AUSSTEHEND", danger)
+                }
                 BotLine("Wallet", s.serverStatus?.optString("wallet")?.take(9)?.plus("…") ?: "Nicht verbunden", white)
                 Text("EINZAHLUNG / NUR SOLANA MAINNET", color = bright, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 OutlinedButton(onClick = { s.refreshDeposit() }, modifier = Modifier.fillMaxWidth()) {
@@ -133,7 +140,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
                 Text("NUR native SOL an eine zuvor von dir kontrollierte, unabhängig geprüfte Adresse senden. Nie SOL an unbekannte Adressen einzahlen. Eine Einzahlung startet keine Trades.",
                     color = danger, fontSize = 11.sp, lineHeight = 15.sp)
-                Text("WICHTIG: Noch keine Auszahlungsfunktion in dieser Beta. Nicht einzahlen, bevor du selbst einen überprüften, sicheren Weg zur Rücküberweisung aus deiner Wallet besitzt.",
+                Text("WICHTIG: Auszahlung nur über gesonderte, standardmäßig deaktivierte Backend-Funktion; noch nicht in der App. Vor echten Einzahlungen unabhängigen Rückweg und vollständigen Sicherheits-Audit prüfen.",
                     color = danger, fontSize = 11.sp, lineHeight = 15.sp)
                 s.botRisk?.let { r ->
                     BotLine("Risikostopp", if (r.optBoolean("halted")) "AKTIV" else "NICHT AUSGELÖST",
