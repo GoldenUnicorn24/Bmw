@@ -138,9 +138,13 @@ async function marketFeed() {
   return marketCache.tokens;
 }
 async function rugReport(mint) {
-  const report = await jsonFetch('https://api.rugcheck.xyz/v1/tokens/' + encodeURIComponent(mint) + '/report/summary');
+  // Full report includes actual mint and freeze authorities; fail-closed if unavailable.
+  const report = await jsonFetch('https://api.rugcheck.xyz/v1/tokens/' + encodeURIComponent(mint) + '/report');
   const reasons = rugRejectReasons(report);
-  return { score: Number(report.score_normalised), risks: report.risks || [], approved: !reasons.length, reasons };
+  return { scoreRaw: Number(report.score), scoreNormalised: Number(report.score_normalised),
+    mintAuthorityEnabled: !!report.token?.mintAuthority,
+    freezeAuthorityEnabled: !!report.token?.freezeAuthority,
+    risks: report.risks || [], approved: !reasons.length, reasons };
 }
 function assertCanTrade() {
   if (!LIVE) throw Error('Echtgeldhandel ist serverseitig deaktiviert');
