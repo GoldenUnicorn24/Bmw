@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import bs58 from 'bs58';
 import {Keypair,VersionedTransaction,TransactionMessage,ComputeBudgetProgram,
-  SystemProgram} from '@solana/web3.js';
+  SystemProgram,TOKEN_PROGRAM_ID,PublicKey} from '@solana/web3.js';
 import {inspectSwapTransaction,checkJupiterExecution,verifySwapChainReceipt,
   waitForConfirmedReceipt} from '../swapGuard.mjs';
 const wallet=Keypair.generate();
@@ -13,14 +13,24 @@ function signed(ixs){
   instructions:ixs}).compileToV0Message();
  const tx=new VersionedTransaction(msg);tx.sign([wallet]);return tx;
 }
+const intent={side:'BUY',mint:token,amountLamports:'10000000'};
+const wsolAta=PublicKey.findProgramAddressSync([
+ wallet.publicKey.toBuffer(),TOKEN_PROGRAM_ID.toBuffer(),
+ new PublicKey('So11111111111111111111111111111111111111112').toBuffer()
+],new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'))[0];
 const good=signed([ComputeBudgetProgram.setComputeUnitLimit({units:180000})]);
 const sig=bs58.encode(good.signatures[0]);
 test('rejects unsigned route, direct SOL redirection and fee-payer mismatch',()=>{
- assert.equal(inspectSwapTransaction(good,wallet.publicKey).signerCount,1);
+ assert.equal(inspectSwapTransaction(good,wallet.publicKey,intent).signerCount,1);
+ const wrapping=signed([SystemProgram.transfer({
+  fromPubkey:wallet.publicKey,toPubkey:wsolAta,lamports:10000000})]);
+ assert.equal(inspectSwapTransaction(wrapping,wallet.publicKey,intent).signerCount,1);
+ assert.throws(()=>inspectSwapTransaction(wrapping,wallet.publicKey,{
+  ...intent,amountLamports:'9000000'}),/capped own WSOL/);
  const redirected=signed([SystemProgram.transfer({
   fromPubkey:wallet.publicKey,toPubkey:Keypair.generate().publicKey,lamports:10000000})]);
- assert.throws(()=>inspectSwapTransaction(redirected,wallet.publicKey),/Direct native SOL transfers/);
- assert.throws(()=>inspectSwapTransaction(good,Keypair.generate().publicKey),/fee payer/);
+ assert.throws(()=>inspectSwapTransaction(redirected,wallet.publicKey,intent),/Direct native SOL transfers/);
+ assert.throws(()=>inspectSwapTransaction(good,Keypair.generate().publicKey,intent),/fee payer/);
 });
 test('Jupiter signature and exact actual amounts must match local signed order',()=>{
  const order={amountLamports:'10000000',estimatedOutputAtomic:'1000'};
