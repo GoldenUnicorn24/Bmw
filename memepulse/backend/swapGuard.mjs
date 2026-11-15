@@ -1,7 +1,9 @@
 // Jupiter v2 live-order defence-in-depth. All checks fail closed.
 // These are NOT a substitute for an independent transaction-program audit.
 import bs58 from 'bs58';
-import {SystemProgram, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,PublicKey} from '@solana/web3.js';
+import {SystemProgram,PublicKey} from '@solana/web3.js';
+const TOKEN_PROGRAM_ID=new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const TOKEN_2022_PROGRAM_ID=new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const WSOL=new PublicKey('So11111111111111111111111111111111111111112');
 const ATA_PROGRAM=new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 const associatedWsol=(wallet)=>PublicKey.findProgramAddressSync(
