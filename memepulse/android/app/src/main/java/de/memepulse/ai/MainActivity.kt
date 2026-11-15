@@ -61,12 +61,12 @@ private fun MemePulse(s: MemeStore) {
         background = Background, surface = Panel, onSurface = White,
         onBackground = White, error = Red
     )
-    // Live data is refreshed only while this UI is alive; a backend is required for 24/7 operation.
-    LaunchedEffect(s.realMarket, s.paperBotEnabled) {
+    // Refresh only true DEX quotes; fake demo ticks are intentionally removed.
+    LaunchedEffect(s.paperBotEnabled, s.activePage) {
         while (true) {
-            delay(if (s.paperBotEnabled) 45000 else if (s.realMarket) 90000 else 7000)
-            if (s.paperBotEnabled || (s.realMarket && s.activePage == 1)) s.refreshMarket()
-            else if (!s.realMarket && (s.activePage == 0 || s.activePage == 1)) s.simulateDemoTick()
+            delay(if (s.paperBotEnabled) 45000 else 90000)
+            if (s.activePage <= 2 || s.paperBotEnabled) s.refreshMarket()
+            if (s.activePage == 2 && !s.paperMode) s.refreshRemoteBot()
         }
     }
     MaterialTheme(colorScheme = scheme) {
