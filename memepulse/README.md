@@ -16,6 +16,7 @@ The project lives exclusively under `memepulse/` on branch `feature/memepulse-ai
 - Auto EXIT for Grok-owned positions when market mark is about **-12% or +25% vs entry** (not guaranteed executed price; only checked periodically; if liquidity collapses, sell may fail).
 - Dedicated daily max buy spend, per-order max, order count, approximate realized SOL loss halt, 24-hour same-token cooldown, STOP file and activity log.
 - Native on-device review and approval of individual tokens from the live radar; high RugCheck risk blocks the allowlist.
+- Search any Solana token by full mint address, even when absent from the promoted feed.
 - Server API journal retains successful, failed and unknown swaps; unresolved unknown transactions stop further automatic trading.
 - HTTPS Caddy / isolated Docker Compose example for self-hosted service.
 - GitHub Actions APK artifact, Node JavaScript syntax checks and regression tests.
@@ -87,7 +88,7 @@ In Android -> **System** paste `https://yourdomain.example` and your Bearer toke
 4. In **System** or dashboard, separately activate 30-minute autonomous trading. The server also must allow it.
 5. The agent scans approved tokens. Grok may recommend BUY or HOLD; strict deterministic limits can reject any BUY. **The model is not guaranteed accurate and has no trading track record.**
 6. During an active session, the server checks documented Grok-owned positions periodically and tries to sell when the configured target or stop-loss mark is crossed.
-7. Stop via the **NOT-AUS** button or by creating the file `backend/STOP` in a non-Docker setup. **With Docker Compose**, the STOP file must be placed **inside the API container** because the container filesystem is read-only; for a durable operational kill switch, use the authenticated API stop button or stop the container with `docker compose stop api`. This does not revert already submitted swaps.
+7. Stop new autonomous trades via the **KI STOP** button. For a persisted and broader **EMERGENCY STOP** blocking all new manual and autonomous live swaps, go to **System -> Sicherheitszentrale -> NOT-AUS**; the pause survives server restarts. Unpause only after reviewing the account and acknowledging the confirmation. In an emergency you can also stop the backend container with `docker compose stop api` (but then even the mobile stop button cannot connect). A submitted onchain transaction cannot be reversed.
 
 ### Safety budgets (defaults)
 
@@ -142,6 +143,8 @@ gradle :app:assembleDebug
 | POST | /api/orders/execute | User-confirmed live swap |
 | POST | /api/agent/start | 30-minute autonomous mode |
 | POST | /api/agent/stop | Stop new autonomous trades |
+| POST | /api/emergency/stop | Persistently block all new real swaps |
+| POST | /api/emergency/resume | Explicitly permit manual real swaps again (AI stays off) |
 
 ## Unresolved production gaps
 
