@@ -70,6 +70,16 @@ class MemeStore(context: Context) {
     var tradeUsd by mutableStateOf("10")
     var activePage by mutableIntStateOf(0)
     var requesting by mutableStateOf(false)
+    // Agent is opt-in and ephemeral: never silently restarts after process death.
+    var paperBotEnabled by mutableStateOf(false)
+    var paperBotWorking by mutableStateOf(false)
+    var paperBotLastCheck by mutableLongStateOf(0L)
+    var paperBotLastResult by mutableStateOf("Noch keine Grok-Prüfung")
+    val paperBotEvents = mutableStateListOf<String>()
+    val agentEvents = mutableStateListOf<JSONObject>()
+    val realPositions = mutableStateListOf<JSONObject>()
+    var realSolBalance by mutableStateOf<Double?>(null)
+    var botRisk by mutableStateOf<JSONObject?>(null)
     private val simulatedInitial = 1000.0
 
     init {
@@ -99,7 +109,9 @@ class MemeStore(context: Context) {
         while (equityPoints.size > 120) equityPoints.removeAt(0)
     }
     fun paperBuy(c: Coin) {
-        val spend = tradeUsd.toDoubleOrNull() ?: 0.0
+        paperBuyAmount(c, tradeUsd.toDoubleOrNull() ?: 0.0)
+    }
+    private fun paperBuyAmount(c: Coin, spend: Double) {
         if (spend <= 0 || spend > cash || spend > equity() * .01 + .001) {
             message = "Papier-Kauf gestoppt: max. 1 % des Kapitals je Order."
             return
@@ -186,6 +198,7 @@ class MemeStore(context: Context) {
                     marketLoading = false
                     recordEquity()
                     message = "Live-Kurse aktualisiert · ausschließlich Marktdaten"
+                    if (paperBotEnabled) runPaperBotCycle()
                 }
             } catch (e: Exception) {
                 main.post {
@@ -204,7 +217,7 @@ class MemeStore(context: Context) {
         }
         recordEquity()
     }
-    fun useDemo() { seedDemo(); message = "DEMO · frei erfundene Token und Kurse" }
+    fun useDemo() { paperBotEnabled = false; seedDemo(); message = "DEMO · frei erfundene Token und Kurse" }
     private fun save() {
         val p = JSONArray()
         positions.forEach {
@@ -288,6 +301,8 @@ class MemeStore(context: Context) {
             save()
         }
         fetchRealHistory()
+        refreshRemoteBot()
+        refreshRealPositions()
     }
     fun fetchRealHistory() = asyncHistory()
     private fun asyncHistory() {
@@ -348,4 +363,118 @@ class MemeStore(context: Context) {
         backend("/api/agent/stop", JSONObject())
         main.post { message = "Auto-Trading deaktiviert"; serverStatus = serverStatus?.apply { put("autoActive", false) } }
     }
+    private fun paperLog(note: String) {
+        paperBotLastResult = note
+        paperBotEvents.add(0, java.text.SimpleDateFormat("HH:mm:ss", Locale.GERMANY)
+            .format(java.util.Date()) + " · " + note)
+        while (paperBotEvents.size > 40) paperBotEvents.removeAt(paperBotEvents.lastIndex)
+    }
+    fun togglePaperBot() {
+        if (paperBotEnabled) {
+            paperBotEnabled = false
+            paperLog("KI-Paper-Bot angehalten")
+            message = "Paper-Automatik ausgeschaltet"
+            return
+        }
+        if (!realMarket || System.currentTimeMillis() - marketTimestamp > 120000) {
+            message = "Zuerst frische Live-Marktdaten im Radar abrufen"
+            return
+        }
+        if (serverStatus?.optBoolean("grokConnected") != true || backendToken.length < 32) {
+            message = "KI-Paper-Bot benötigt einen verbundenen Grok-Backend-Server"
+            return
+        }
+        paperBotEnabled = true
+        paperBotLastCheck = 0
+        paperLog("KI-Paper-Bot aktiviert · nur Simulation · max. 1 % pro Kauf")
+        runPaperBotCycle()
+    }
+    // The agent buys only when xAI AND server-side RugCheck + fixed gates agree.
+    // No Grok connection => NO automated buys, not fabricated AI decisions.
+    fun runPaperBotCycle() {
+        if (!paperBotEnabled || paperBotWorking || !realMarket) return
+        if (System.currentTimeMillis() - marketTimestamp > 120000) {
+            paperLog("Kurse veraltet · keine Orders")
+            return
+        }
+        if (System.currentTimeMillis() - paperBotLastCheck < 60000) return
+        paperBotLastCheck = System.currentTimeMillis()
+        // Exits are deterministic and always take priority over new signals.
+        var sold = false
+        for (p in positions.toList()) {
+            val coin = coins.find { it.mint == p.mint } ?: continue
+            val changePct = (coin.price / p.entry - 1.0) * 100
+            if (changePct <= -12.0 || changePct >= 25.0) {
+                paperSell(p)
+                paperLog("Paper EXIT " + p.symbol + ": " + signed(changePct)
+                    + if (changePct <= -12.0) " Stop-Loss" else " Take-Profit")
+                sold = true
+            }
+        }
+        if (sold || positions.size >= 3 || cash < equity() * .005) return
+        val candidates = coins.filter { it.live && it.score >= 85 && positions.none { p -> p.mint == it.mint } }
+            .sortedByDescending { it.score }.take(4)
+        if (candidates.isEmpty()) { paperLog("HOLD · keine Coins über der Sicherheitsschwelle"); return }
+        paperBotWorking = true
+        thread {
+            try {
+                var found = false
+                for (coin in candidates) {
+                    if (!paperBotEnabled) break
+                    val result = try {
+                        backend("/api/ai/signal", JSONObject().put("mint", coin.mint))
+                    } catch (e: Exception) {
+                        main.post { paperLog("Scanfehler: " + (e.message ?: "Server").take(90)) }
+                        continue
+                    }
+                    val approved = result.optBoolean("eligible", false) &&
+                        result.optString("action") == "BUY" &&
+                        result.optString("mint") == coin.mint
+                    main.post {
+                        paperLog(coin.symbol + ": " + result.optString("action", "HOLD") +
+                            " · " + result.optString("reason", "ohne Begründung").take(75))
+                        if (approved && paperBotEnabled &&
+                            System.currentTimeMillis() - marketTimestamp < 120000 &&
+                            positions.none { it.mint == coin.mint }) {
+                            paperBuyAmount(coin, min(9.0, equity() * .009))
+                            paperLog("Grok + Filter haben Paper BUY " + coin.symbol + " zugelassen")
+                        }
+                    }
+                    if (approved) { found = true; break }
+                }
+                if (!found) main.post { paperLog("Scan beendet · kein genehmigtes Kaufsignal") }
+            } finally { main.post { paperBotWorking = false } }
+        }
+    }
+    fun refreshRemoteBot() {
+        if (backendToken.length < 32) return
+        thread {
+            try {
+                val x = backend("/api/agent")
+                val events = x.optJSONArray("events") ?: JSONArray()
+                main.post {
+                    agentEvents.clear()
+                    for (i in 0 until min(events.length(), 30)) agentEvents.add(events.getJSONObject(i))
+                    botRisk = x.optJSONObject("risk")
+                    serverStatus = serverStatus?.apply { put("autoActive", x.optBoolean("active")) }
+                }
+            } catch (_: Exception) { }
+        }
+    }
+    fun refreshRealPositions() {
+        if (backendToken.length < 32) return
+        thread {
+            try {
+                val portfolio = backend("/api/portfolio")
+                val wallet = backend("/api/wallet")
+                val p = portfolio.optJSONArray("positions") ?: JSONArray()
+                main.post {
+                    realPositions.clear()
+                    for (i in 0 until min(20, p.length())) realPositions.add(p.getJSONObject(i))
+                    realSolBalance = if (wallet.isNull("balanceSol")) null else wallet.optDouble("balanceSol")
+                }
+            } catch (_: Exception) { }
+        }
+    }
+
 }
