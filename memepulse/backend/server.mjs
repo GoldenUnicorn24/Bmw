@@ -16,6 +16,18 @@ const LIVE = env.ENABLE_LIVE_TRADES === 'YES_I_ACCEPT_REAL_LOSSES';
 const AUTO_ALLOWED = env.ALLOW_AUTONOMOUS_LIVE === 'YES_I_ACCEPT_AUTONOMOUS_LOSSES';
 const ALLOWLIST = new Set((env.TRADING_ALLOWLIST || '').split(',').map(x => x.trim()).filter(Boolean));
 const ALLOWLIST_FILE = env.ALLOWLIST_FILE || './private/allowlist.json';
+const SAFETY_STATE_FILE = env.SAFETY_STATE_FILE || './private/safety.json';
+let emergencyStopped = false;
+if (fs.existsSync(SAFETY_STATE_FILE)) {
+  const data = JSON.parse(fs.readFileSync(SAFETY_STATE_FILE, 'utf8'));
+  emergencyStopped = data.tradingPaused === true;
+}
+function persistSafety() {
+  fs.mkdirSync(path.dirname(SAFETY_STATE_FILE), { recursive: true, mode: 0o700 });
+  const tmp = SAFETY_STATE_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify({ tradingPaused: emergencyStopped, updatedAt: Date.now() }), { mode: 0o600 });
+  fs.renameSync(tmp, SAFETY_STATE_FILE);
+}
 if (fs.existsSync(ALLOWLIST_FILE)) {
   const persisted = JSON.parse(fs.readFileSync(ALLOWLIST_FILE, 'utf8'));
   if (!Array.isArray(persisted)) throw Error('Allowlist-Datendatei ungültig');
@@ -165,7 +177,7 @@ async function allowlistCandidate(mint) {
 function assertCanTrade() {
   if (!LIVE) throw Error('Echtgeldhandel ist serverseitig deaktiviert');
   if (!signer) throw Error('Kein Trading-Wallet auf dem Server');
-  if (fs.existsSync('./STOP')) throw Error('STOP-Datei vorhanden: alle Trades gesperrt');
+  if (emergencyStopped || fs.existsSync('./STOP')) throw Error('NOT-AUS aktiv: alle Trades gesperrt');
   if (busy) throw Error('Ein Trade wird bereits ausgeführt');
 }
 async function prepareOrder(body, source = 'MANUAL') {
@@ -333,7 +345,7 @@ async function agentCycle() {
     activeUntil = 0;
     return;
   }
-  if (fs.existsSync('./STOP')) { activeUntil = 0; agentEvent('STOPPED', 'STOP-Datei erkannt'); return; }
+  if (emergencyStopped || fs.existsSync('./STOP')) { activeUntil = 0; agentEvent('STOPPED', 'NOT-AUS erkannt'); return; }
   if (busy || Date.now() - lastAutoCycle < 90000) return;
   lastAutoCycle = Date.now();
   const halt = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
@@ -363,7 +375,7 @@ async function agentCycle() {
   }
   if (holdings.length >= MAX_OPEN_POSITIONS) return;
   for (const mint of ALLOWLIST) {
-    if (Date.now() >= activeUntil || fs.existsSync('./STOP')) return;
+    if (Date.now() >= activeUntil || emergencyStopped || fs.existsSync('./STOP')) return;
     if (cooldown.get(mint) && Date.now() - cooldown.get(mint) < 86400000) continue;
     if (journal.some(t => t.side === 'BUY' && t.mint === mint && t.at > Date.now() - 86400000 &&
       ['SUBMITTED', 'SUCCESS', 'UNKNOWN'].includes(t.status))) continue;
@@ -374,7 +386,7 @@ async function agentCycle() {
       agentEvent(result.eligible ? 'BUY_SIGNAL' : 'HOLD_SIGNAL', mint.slice(0, 12) + ' · ' + (result.reason || 'Kein Signal'));
       if (!result.eligible) continue;
       const preview = await prepareOrder({ side: 'BUY', mint, amountSol: Number(MAX_TRADE) / 1e9 }, 'GROK');
-      if (Date.now() >= activeUntil || fs.existsSync('./STOP')) return;
+      if (Date.now() >= activeUntil || emergencyStopped || fs.existsSync('./STOP')) return;
       await executeOrder(preview.previewId, 'GROK');
       return; // Only one transaction per cycle.
     } catch (err) {
@@ -397,7 +409,7 @@ const server = http.createServer(async (req, res) => {
       maxOrdersPerDay: MAX_ORDERS, maxOpenPositions: MAX_OPEN_POSITIONS,
       stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
       maxDailyRealizedLossSol: MAX_REALIZED_LOSS_SOL,
-      risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL), stopped: fs.existsSync('./STOP'),
+      risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL), stopped: emergencyStopped || fs.existsSync('./STOP'),
       warning: 'Kein garantierter Profit. Sicherheitsprüfung ersetzt kein Audit.'
     });
     if (req.method === 'GET' && url.pathname === '/api/market') return reply(res, 200, {
@@ -405,7 +417,7 @@ const server = http.createServer(async (req, res) => {
     });
     if (req.method === 'GET' && url.pathname === '/api/trades') return reply(res, 200, { trades: journal.slice(-80).reverse() });
     if (req.method === 'GET' && url.pathname === '/api/agent') return reply(res, 200, {
-      active: Date.now() < activeUntil && !fs.existsSync('./STOP'),
+      active: Date.now() < activeUntil && !emergencyStopped && !fs.existsSync('./STOP'),
       expiresAt: activeUntil || null, lastObservation: lastAgentObservation,
       lastError: lastAgentError, events: agentEvents,
       limits: { stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
@@ -429,6 +441,23 @@ const server = http.createServer(async (req, res) => {
     });
     if (req.method !== 'POST') return reply(res, 404, { error: 'Route nicht gefunden' });
     const body = await readBody(req);
+    if (url.pathname === '/api/emergency/stop') {
+      if (body.confirm !== 'STOP ALL LIVE TRADING') throw Error('NOT-AUS-Bestätigung fehlt');
+      emergencyStopped = true;
+      activeUntil = 0;
+      persistSafety();
+      agentEvent('EMERGENCY_STOP', 'Alle neuen Swaps gesperrt');
+      return reply(res, 200, { stopped: true, note: 'Bereits gesendete Blockchain-Swaps bleiben unwiderruflich.' });
+    }
+    if (url.pathname === '/api/emergency/resume') {
+      if (body.confirm !== 'I ACCEPT RESUMING REAL TRADES') throw Error('Entsperr-Bestätigung fehlt');
+      if (fs.existsSync('./STOP')) throw Error('STOP-Datei bleibt aktiv');
+      if (safetyStatus(journal, MAX_REALIZED_LOSS_SOL).halted) throw Error('Risikostopp erlaubt keine Freigabe');
+      emergencyStopped = false;
+      persistSafety();
+      agentEvent('EMERGENCY_RESUME', 'Manueller Echtgeldhandel wieder erlaubt; Auto-Agent bleibt AUS');
+      return reply(res, 200, { stopped: false, autoActive: false });
+    }
     if (url.pathname === '/api/allowlist/check') {
       return reply(res, 200, await allowlistCandidate(String(body.mint || '')));
     }
@@ -467,7 +496,7 @@ const server = http.createServer(async (req, res) => {
       if (!AUTO_ALLOWED || !LIVE || !GROK_KEY || !ALLOWLIST.size) throw Error('Autonomes Trading nicht vollständig freigeschaltet');
       const safety = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
       if (safety.halted) throw Error('Bot wegen Risikostopp blockiert: ' + safety.reasons.join('; '));
-      if (fs.existsSync('./STOP')) throw Error('STOP-Datei blockiert den Bot');
+      if (emergencyStopped || fs.existsSync('./STOP')) throw Error('NOT-AUS blockiert den Bot');
       if (body.confirm !== 'ACTIVATE AUTOMATIC LIVE TRADING') throw Error('Autonome Bestätigung fehlt');
       activeUntil = Date.now() + 30 * 60 * 1000; // User must renew; never persists across restarts.
       agentEvent('ACTIVATED', 'Benutzer aktivierte eine 30-Minuten-Session');
