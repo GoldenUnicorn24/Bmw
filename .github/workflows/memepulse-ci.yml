@@ -5,6 +5,7 @@ on:
       - feature/memepulse-ai-android
       - feature/memepulse-v03-pro-trader
       - feature/memepulse-v04-native-ai
+      - feature/memepulse-v05-autopilot
     paths:
       - "memepulse/**"
       - ".github/workflows/memepulse-ci.yml"
@@ -66,9 +67,9 @@ jobs:
         working-directory: memepulse/android
         run: gradle --no-daemon :app:assembleDebug
       - name: Prepare APK
-        run: cp memepulse/android/app/build/outputs/apk/debug/app-debug.apk MemePulseAI-Android-v0.4-debug.apk
+        run: cp memepulse/android/app/build/outputs/apk/debug/app-debug.apk MemePulseAI-Android-v0.5-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MemePulseAI-Android-v0.4-debug-APK
-          path: MemePulseAI-Android-v0.4-debug.apk
+          name: MemePulseAI-Android-v0.5-debug-APK
+          path: MemePulseAI-Android-v0.5-debug.apk
           retention-days: 30
