@@ -222,7 +222,7 @@ async function prepareOrder(body, source = 'MANUAL') {
     { headers: { 'x-api-key': JUPITER_KEY } });
   if (!quote.transaction || !quote.requestId || !quote.outAmount) throw Error('Jupiter hat keine handelbare Route geliefert');
   if (Number.isFinite(Number(quote.priceImpactPct)) && quote.priceImpactPct !== null &&
-    Math.abs(Number(quote.priceImpactPct)) > MAX_PRICE_IMPACT_PCT)
+    Math.abs(Number(quote.priceImpactPct) * 100) > MAX_PRICE_IMPACT_PCT)
     throw Error('Jupiter-Preiswirkung oberhalb der Risikogrenze');
   if (quote.transactionVersion && Number(quote.transactionVersion) > 0)
     throw Error('Transaktionsversion nicht vom Server unterstützt');
