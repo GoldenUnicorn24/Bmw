@@ -122,9 +122,9 @@ private fun MemePulse(s: MemeStore) {
         if (showAutoConfirm) {
             AlertDialog(onDismissRequest = { showAutoConfirm = false }, containerColor = Panel2,
                 title = { Text("KI-Autotrading aktivieren?", color = White) },
-                text = { Text("Der Server kann dann bis zu 30 Minuten lang ohne jede einzelne Bestätigung ECHTE Token kaufen. Strikte Einsatzlimits und Allowlist gelten. Verluste bis zum eingesetzten Betrag sind möglich.", color = White) },
+                text = { Text("Der Server kann dann bis zu 24 Stunden lang ohne jede einzelne Bestätigung ECHTE Token kaufen. Strikte Einsatzlimits und Allowlist gelten. Verluste bis zum eingesetzten Betrag sind möglich.", color = White) },
                 confirmButton = { Button(onClick = { showAutoConfirm = false; s.startAgent() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("30 Minuten Echtgeld-Auto aktivieren", color = Background) } },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("24 Stunden Echtgeld-Auto aktivieren", color = Background) } },
                 dismissButton = { TextButton(onClick = { showAutoConfirm = false }) { Text("Nein") } })
         }
     }
@@ -477,10 +477,10 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (s.serverStatus?.optBoolean("autoActive") == true) "● AUTO-LIVE IST AKTIV" else "○ AUTO-LIVE IST AUS",
                     color = if (s.serverStatus?.optBoolean("autoActive") == true) Red else Green, fontWeight = FontWeight.Bold)
-                Text("Nur freigegebene Tokens. Die MemePulse-Engine trifft regelbasierte Entscheidungen; der Server erzwingt zusätzliche Sicherheitsgrenzen. Automatik endet nach 30 Minuten. Danach sind keine Exits mehr aktiv.", color = Muted, fontSize = 12.sp)
+                Text("Nur freigegebene Tokens. Die MemePulse-Engine trifft regelbasierte Entscheidungen; der Server erzwingt zusätzliche Sicherheitsgrenzen. Kaufautomatik endet nach höchstens 24 Stunden; bestehende Bot-Positionen werden danach bis zu 2 Stunden weiter auf Ausstiege geprüft, solange der Server läuft. Keine Stop-Loss-Garantie.", color = Muted, fontSize = 12.sp)
                 Button(onClick = onAutoConfirm, enabled = s.serverStatus?.optBoolean("autoAllowed") == true && !s.requesting,
                     colors = ButtonDefaults.buttonColors(containerColor = Red), modifier = Modifier.fillMaxWidth()) {
-                    Text("KI-Live-Modus 30 Min. aktivieren", color = Background)
+                    Text("Autopilot maximal 24 Std. starten", color = Background)
                 }
                 OutlinedButton(onClick = { s.stopAgent() }, enabled = !s.requesting, modifier = Modifier.fillMaxWidth()) {
                     Text("■ NOT-AUS: Auto-Bot stoppen", color = Red)

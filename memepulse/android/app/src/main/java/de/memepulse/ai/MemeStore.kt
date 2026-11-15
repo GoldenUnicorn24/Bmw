@@ -43,7 +43,7 @@ data class Coin(
     }
 }
 
-data class PaperPosition(val mint: String, val symbol: String, val quantity: Double, val invested: Double, val entry: Double)
+data class PaperPosition(val mint: String, val symbol: String, val quantity: Double, val invested: Double, val entry: Double, val openedAt: Long = 0L)
 data class PaperFill(val at: Long, val side: String, val symbol: String, val amount: Double, val pnl: Double)
 
 fun usd(v: Double): String = "$" + String.format(Locale.US, "%,.2f", v)
@@ -83,8 +83,23 @@ class MemeStore(context: Context) {
     val agentEvents = mutableStateListOf<JSONObject>()
     val realPositions = mutableStateListOf<JSONObject>()
     var realSolBalance by mutableStateOf<Double?>(null)
+    var depositAddress by mutableStateOf("")
+    var depositBalance by mutableStateOf<Double?>(null)
+    var depositReady by mutableStateOf(false)
+    var strategyHealth by mutableStateOf<JSONObject?>(null)
     var botRisk by mutableStateOf<JSONObject?>(null)
     private val simulatedInitial = 1000.0
+    private val marketHistory = mutableMapOf<String, MutableList<MarketProbe>>()
+    private val paperPeaks = mutableMapOf<String, Double>()
+    private fun observe(c: Coin, timestamp: Long = System.currentTimeMillis()) {
+        if (!c.live || !c.price.isFinite() || c.price <= 0 || c.liquidity <= 0) return
+        val history = marketHistory.getOrPut(c.mint) { mutableListOf() }
+        history.removeAll { timestamp - it.at > 900000 }
+        if (history.isEmpty() || timestamp - history.last().at >= 55000) {
+            history.add(MarketProbe(timestamp,c.price,c.liquidity))
+            while(history.size > 12) history.removeAt(0)
+        }
+    }
 
     init {
         restore()
@@ -116,7 +131,7 @@ class MemeStore(context: Context) {
         if (!paperMode || !realMarket || !c.live) { message = "Paper-Kauf nur im aktivierten Simulationsmodus mit Live-Kursen"; return }
         val quantity = spend * .992 / c.price // 0.8 % simulated total entry cost
         cash -= spend
-        positions.add(PaperPosition(c.mint, c.symbol, quantity, spend, c.price))
+        positions.add(PaperPosition(c.mint, c.symbol, quantity, spend, c.price, System.currentTimeMillis()))
         fills.add(0, PaperFill(System.currentTimeMillis(), "BUY", c.symbol, spend, 0.0))
         recordEquity()
         save()
@@ -128,6 +143,7 @@ class MemeStore(context: Context) {
         cash += proceeds
         val pnl = proceeds - p.invested
         positions.remove(p)
+        paperPeaks.remove(p.mint)
         fills.add(0, PaperFill(System.currentTimeMillis(), "SELL", p.symbol, proceeds, pnl))
         recordEquity()
         save()
@@ -136,6 +152,7 @@ class MemeStore(context: Context) {
     fun resetPaper() {
         cash = simulatedInitial
         positions.clear()
+        paperPeaks.clear()
         fills.clear()
         equityPoints.clear()
         recordEquity()
@@ -190,6 +207,7 @@ class MemeStore(context: Context) {
                 main.post {
                     coins.clear()
                     coins.addAll(best.values.sortedByDescending { it.score })
+                    coins.forEach { observe(it) }
                     realMarket = true
                     marketTimestamp = System.currentTimeMillis()
                     marketLoading = false
@@ -247,6 +265,7 @@ class MemeStore(context: Context) {
                 main.post {
                     coins.removeAll { it.mint == clean }
                     coins.add(0, tok)
+                    observe(tok)
                     realMarket = true
                     marketTimestamp = System.currentTimeMillis()
                     marketLoading = false
@@ -271,7 +290,7 @@ class MemeStore(context: Context) {
         val p = JSONArray()
         positions.forEach {
             p.put(JSONObject().put("mint", it.mint).put("symbol", it.symbol).put("quantity", it.quantity)
-                .put("invested", it.invested).put("entry", it.entry))
+                .put("invested", it.invested).put("entry", it.entry).put("openedAt", it.openedAt))
         }
         val j = JSONArray()
         fills.take(150).forEach {
@@ -289,7 +308,7 @@ class MemeStore(context: Context) {
             for (i in 0 until p.length()) {
                 val x = p.getJSONObject(i)
                 positions.add(PaperPosition(x.getString("mint"), x.getString("symbol"), x.getDouble("quantity"),
-                    x.getDouble("invested"), x.getDouble("entry")))
+                    x.getDouble("invested"), x.getDouble("entry"), x.optLong("openedAt", 0L)))
             }
             val j = JSONArray(prefs.getString("fills", "[]"))
             for (i in 0 until j.length()) {
@@ -352,6 +371,7 @@ class MemeStore(context: Context) {
         fetchRealHistory()
         refreshRemoteBot()
         refreshRealPositions()
+        refreshDeposit()
     }
     fun fetchRealHistory() = asyncHistory()
     private fun asyncHistory() {
@@ -459,10 +479,19 @@ class MemeStore(context: Context) {
         for (p in positions.toList()) {
             val coin = coins.find { it.mint == p.mint } ?: continue
             val changePct = (coin.price / p.entry - 1.0) * 100
-            if (changePct <= -12.0 || changePct >= 25.0) {
+            val high = max(max(p.entry, coin.price), paperPeaks[p.mint] ?: p.entry)
+            paperPeaks[p.mint] = high
+            val peakDropPct = (1 - coin.price / high) * 100
+            val reason = when {
+                changePct <= -12 -> "Stop-Loss"
+                changePct >= 25 -> "Take-Profit"
+                high >= p.entry*1.06 && peakDropPct >= 9 -> "Trailing-Stop"
+                p.openedAt > 0 && System.currentTimeMillis() - p.openedAt >= 120*60000L -> "Maximaldauer"
+                else -> null
+            }
+            if (reason != null) {
                 paperSell(p)
-                paperLog("Paper EXIT " + p.symbol + ": " + signed(changePct)
-                    + if (changePct <= -12.0) " Stop-Loss" else " Take-Profit")
+                paperLog("Paper EXIT " + p.symbol + ": " + signed(changePct) + " " + reason)
                 sold = true
             }
         }
@@ -478,9 +507,10 @@ class MemeStore(context: Context) {
         val recentlyBought = fills.filter { it.side == "BUY" && it.at >= System.currentTimeMillis() - 86400000 }
             .map { it.symbol }.toSet()
         val candidates = coins.filter { it.live && NativeStrategy.analyze(it).eligible &&
+            NativeStrategy.confirm(marketHistory[it.mint] ?: emptyList()).eligible &&
             it.symbol !in recentlyBought && positions.none { p -> p.mint == it.mint } }
             .sortedByDescending { NativeStrategy.analyze(it).score }.take(4)
-        if (candidates.isEmpty()) { paperLog("HOLD · keine positiven Quant-Signale"); return }
+        if (candidates.isEmpty()) { paperLog("HOLD · keine dreifach bestätigten Quant-Signale"); return }
         paperBotWorking = true
         thread {
             try {
@@ -520,9 +550,25 @@ class MemeStore(context: Context) {
                     agentEvents.clear()
                     for (i in 0 until min(events.length(), 30)) agentEvents.add(events.getJSONObject(i))
                     botRisk = x.optJSONObject("risk")
+                    strategyHealth = x.optJSONObject("performance")
                     serverStatus = serverStatus?.apply { put("autoActive", x.optBoolean("active")) }
                 }
             } catch (_: Exception) { }
+        }
+    }
+    fun refreshDeposit() {
+        if (backendToken.length < 32) { message = "Zuerst Trading-Server verbinden"; return }
+        thread {
+            try {
+                val d = backend("/api/deposit")
+                main.post {
+                    depositAddress = d.optString("address", "").takeIf { it != "null" } ?: ""
+                    depositBalance = if (d.isNull("balanceSol")) null else d.optDouble("balanceSol")
+                    depositReady = d.optBoolean("ready", false)
+                    message = if (depositAddress.isNotBlank()) "Trading-Wallet-Adresse geladen – Solana mainnet"
+                        else "Server hat noch keine separate Trading-Wallet"
+                }
+            } catch (err: Exception) { main.post { message = "Wallet-Abfrage: " + (err.message ?: "").take(90) } }
         }
     }
     fun refreshRealPositions() {

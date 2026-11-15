@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -32,6 +34,7 @@ private val white = Color(0xFFF7F9FF)
 @Composable
 fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
     val engineReady = s.serverStatus?.optBoolean("engineConnected") == true
+    val clipboard = LocalClipboardManager.current
     val live = s.serverStatus?.optBoolean("live") == true
     val auto = s.serverStatus?.optBoolean("autoActive") == true
     val autoAllowed = s.serverStatus?.optBoolean("autoAllowed") == true
@@ -45,11 +48,11 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 MiniLabel("◈   AI ENGINE / CONTROL CENTER", bright)
-                MiniLabel("v0.4  BETA", secondary)
+                MiniLabel("v0.5  AUTOPILOT 2", secondary)
             }
             Spacer(Modifier.height(1.dp))
             Text("Trade smarter.", color = white, fontSize = 30.sp, fontWeight = FontWeight.Black, lineHeight = 34.sp)
-            Text("Eigene Quant-Engine · keine Modell-API · keine Gewinngarantie",
+            Text("Mehrfach bestätigte Signale · flexible Risikobudgets · keine Gewinngarantie",
                 color = secondary, fontSize = 12.sp, lineHeight = 17.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 StatusPill(if (engineReady) "● ENGINE / SERVER" else "● ENGINE / GERÄT", if (engineReady) mint else bright)
@@ -92,13 +95,13 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
         }
         }
         if (!s.paperMode) {
-        Text("01   LIVE-TRADING-SERVER", color = white, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = .6.sp)
+        Text("01   AUTOPILOT & EINZAHLUNG", color = white, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = .6.sp)
         Surface(color = tile, shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically) {
                     Column {
-                        Text("Autonomer Echtgeld-Bot", color = white, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                        Text("MemePulse Autopilot 2", color = white, fontWeight = FontWeight.Bold, fontSize = 19.sp)
                         Text("Kauft und verkauft über Jupiter / Solana", color = secondary, fontSize = 11.sp)
                     }
                     StatusPill(if (auto) "● LIVE" else "● GESPERRT",
@@ -111,19 +114,47 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                 BotLine("Server Live-Trading", if (live) "FREIGEGEBEN" else "AUS", if (live) danger else mint)
                 BotLine("KI-Automatik", if (autoAllowed) "KONFIGURIERT" else "AUS", if (autoAllowed) danger else mint)
                 BotLine("Wallet", s.serverStatus?.optString("wallet")?.take(9)?.plus("…") ?: "Nicht verbunden", white)
+                Text("EINZAHLUNG / NUR SOLANA MAINNET", color = bright, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                OutlinedButton(onClick = { s.refreshDeposit() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("↻ Eigene Einzahlungsadresse anzeigen", color = bright)
+                }
+                if (s.depositAddress.isNotBlank()) {
+                    Text(s.depositAddress, color = white, fontSize = 12.sp, lineHeight = 18.sp)
+                    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(s.depositAddress)) },
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text("Adresse kopieren", color = mint)
+                    }
+                    Text("Balance: " + (s.depositBalance?.let {
+                        String.format(Locale.US, "%.5f SOL", it)
+                    } ?: "nicht verfügbar"), color = white, fontSize = 12.sp)
+                } else {
+                    Text("Noch keine echte Wallet-Adresse: Server und separate Hot Wallet einrichten.",
+                        color = secondary, fontSize = 11.sp)
+                }
+                Text("NUR native SOL an eine zuvor von dir kontrollierte, unabhängig geprüfte Adresse senden. Nie SOL an unbekannte Adressen einzahlen. Eine Einzahlung startet keine Trades.",
+                    color = danger, fontSize = 11.sp, lineHeight = 15.sp)
+                Text("WICHTIG: Noch keine Auszahlungsfunktion in dieser Beta. Nicht einzahlen, bevor du selbst einen überprüften, sicheren Weg zur Rücküberweisung aus deiner Wallet besitzt.",
+                    color = danger, fontSize = 11.sp, lineHeight = 15.sp)
                 s.botRisk?.let { r ->
                     BotLine("Risikostopp", if (r.optBoolean("halted")) "AKTIV" else "NICHT AUSGELÖST",
                         if (r.optBoolean("halted")) danger else mint)
                     BotLine("Realisierte P&L heute", String.format(Locale.US, "%.5f SOL", r.optDouble("dailyRealizedPnlSol", 0.0)),
                         if (r.optDouble("dailyRealizedPnlSol") >= 0) mint else danger)
                 }
-                Text("Sicherheit: Nur freigegebene Mint-Adressen, Handelslimits und zeitlich begrenzte Aktivierung. Stop-Loss ist nicht garantiert. Nach Session-Ende läuft keine automatische Verkaufsüberwachung weiter.",
+                s.strategyHealth?.let { health ->
+                    BotLine("Erfahrung", health.optInt("trades", 0).toString() + " abgeschlossene Trades", white)
+                    BotLine("Strategie-Wächter",
+                        if (health.optBoolean("halted", health.optBoolean("halt", false))) "KAUFSTOPP"
+                        else health.optString("status", "Noch keine Daten"),
+                        if (health.optBoolean("halt", false)) danger else secondary)
+                }
+                Text("Zuerst mehrere Kursbeobachtungen, Liquiditätskontrolle und Risikobudget. Exits sind zeitlich begrenzt; nach Sessionende bis zu 2 Stunden Exit-Only-Prüfung; danach keine laufende Überwachung. Nicht für unbeaufsichtigten Echtgeldbetrieb auditiert.",
                     color = secondary, fontSize = 11.sp, lineHeight = 16.sp)
                 Button(onClick = onAutoConfirm, enabled = autoAllowed && live && engineReady && !auto && !s.requesting,
                     modifier = Modifier.fillMaxWidth().height(47.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = danger),
                     shape = RoundedCornerShape(15.dp)) {
-                    Text("KI-ECHTGELD-BOT 30 MIN. AKTIVIEREN", fontSize = 12.sp, fontWeight = FontWeight.Black, color = ink)
+                    Text("AUTOPILOT BIS ZU 24 H AKTIVIEREN", fontSize = 12.sp, fontWeight = FontWeight.Black, color = ink)
                 }
                 OutlinedButton(onClick = { s.stopAgent() }, enabled = !s.requesting,
                     modifier = Modifier.fillMaxWidth()) { Text("■  NOT-AUS / AUTO STOPPEN", color = danger, fontWeight = FontWeight.Bold) }

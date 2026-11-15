@@ -1,4 +1,4 @@
-# MemePulse AI v0.4 — Native Android Trading Terminal
+# MemePulse AI v0.5 — Native Android Trading Terminal
 
 Eine eigenständige Android-App und Node.js-Solana-Trading-Backend im separaten Feature-Branch des BMW-Repositories. Das vorhandene BMW-Projekt unter /app bleibt unverändert.
 
@@ -6,7 +6,7 @@ Eine eigenständige Android-App und Node.js-Solana-Trading-Backend im separaten 
 
 ## Ohne Grok und ohne externe Sprachmodell-API
 
-MemePulse nutzt die selbst programmierte **Quant Engine 1.0**:
+MemePulse nutzt die selbst programmierte **Autopilot 2**:
 - 5m-/1h-/6h-Momentum und Kauf-/Verkaufsdruck
 - Liquidität, 1h-/24h-Handelsvolumen, Token-Alter und FDV/Liquidität
 - Transparente Scores und HOLD/BUY-Erklärungen
@@ -14,6 +14,19 @@ MemePulse nutzt die selbst programmierte **Quant Engine 1.0**:
 - Deterministische Risikokontrollen, unabhängig vom Quant-Score
 
 Dies ist ein **regelbasiertes** Trading-Modell und **kein** trainiertes neuronales Netz. Es hat keine nachgewiesene Gewinnerwartung.
+
+
+## v0.5: Mehrstufiger Autopilot
+
+- Mindestens drei unabhängige Kursmessungen über mindestens zwei Minuten, bevor neue Echtgeldpositionen eröffnet werden dürfen.
+- Zusätzliche Filter gegen Pump-Spikes, schnelle Trendwenden und Liquiditätsabflüsse.
+- Kaufgröße auf höchstens 2 % des Walletkapitals und ein hypothetisches Risikobudget von 0,5 % des Walletwertes beim geplanten Stopp begrenzt, zusätzlich zu den festen Tages-/Trade-Caps.
+- Stop-Loss, Take-Profit, Trailing-Stop, maximale Haltedauer und bis zu zwei Stunden Exit-Only-Prüfung nach Ende der maximal 24-stündigen autorisierten Session.
+- Strategie-Qualitätsstopp: nach mindestens 20 abgeschlossenen automatischen Verkäufen keine neuen Käufe bei gemessener negativer Durchschnittsrendite.
+- Read-only Einzahlungsanzeige für eine **bereits eingerichtete** separate Solana-Hot-Wallet. Kein Echtgeld ohne Server und explizite Freigabe.
+- Android-Paper-Engine verwendet ebenfalls mehrere unabhängige Kursbestätigungen. Simulationsmodus nur unter Einstellungen einstellbar.
+
+**Wichtig:** Es ist kein trainiertes neuronales Netzwerk, kein nachgewiesen profitables System und kein vollautomatischer Custody-Dienst. Ohne Wallet- und Backend-Setup kann die App keine echten Transaktionen ausführen. Einzahlungen allein autorisieren nie eine Handelssitzung. Server-/RPC-Ausfälle, Liquidität und Slippage können automatisches Verkaufen verhindern.
 
 ## Android
 - Kotlin + Jetpack Compose, Android 8+
@@ -27,15 +40,15 @@ Dies ist ein **regelbasiertes** Trading-Modell und **kein** trainiertes neuronal
 
 ## Server
 - Node.js >=22, REST API, Auth-Bearer Token, nur localhost gebunden
-- Solana Jupiter Swap API V2, getrennte Server-Hot-Wallet
+- Solana Jupiter Swap API V2, getrennte Server-Hot-Wallet und Anzeige der öffentlichen Solana-Mainnet-Einzahlungsadresse (kein Custody-Service)
 - Mint-Allowlist, per-Trade und tägliche Einsatzlimits, Positionslimit, RugCheck, Sperre auf unklaren Transaktionen
-- Vollautomatischer **echter** Bot separat opt-in für maximal 30 Minuten, serverseitig zunächst deaktiviert
-- Nach Ablauf läuft KEINE automatische Exit-Überwachung weiter
+- Vollautomatischer **echter** Bot separat opt-in für maximal 24 Stunden, serverseitig zunächst deaktiviert
+- Nach Ablauf läuft bis zu zwei Stunden Exit-Only-Überwachung weiter, solange der Server läuft; danach nicht mehr
 - Docker-Beispiel, reproduzierbare Risikotests, Android GitHub Actions Debug APK
 
 ## Android Build
 GitHub Actions -> **MemePulse AI - Android APK** -> neuester erfolgreicher Lauf auf
-**feature/memepulse-v04-native-ai** -> **Artifacts** -> MemePulseAI-Android-v0.4-debug-APK.
+**feature/memepulse-v05-autopilot** -> **Artifacts** -> MemePulseAI-Android-v0.5-debug-APK.
 
 Lokal (Android SDK 35, Gradle 8.12, JDK 17):
 
