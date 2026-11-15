@@ -83,6 +83,10 @@ class MemeStore(context: Context) {
     val agentEvents = mutableStateListOf<JSONObject>()
     val realPositions = mutableStateListOf<JSONObject>()
     var realSolBalance by mutableStateOf<Double?>(null)
+    var depositAddress by mutableStateOf("")
+    var depositBalance by mutableStateOf<Double?>(null)
+    var depositReady by mutableStateOf(false)
+    var strategyHealth by mutableStateOf<JSONObject?>(null)
     var botRisk by mutableStateOf<JSONObject?>(null)
     private val simulatedInitial = 1000.0
 
@@ -352,6 +356,7 @@ class MemeStore(context: Context) {
         fetchRealHistory()
         refreshRemoteBot()
         refreshRealPositions()
+        refreshDeposit()
     }
     fun fetchRealHistory() = asyncHistory()
     private fun asyncHistory() {
@@ -520,9 +525,25 @@ class MemeStore(context: Context) {
                     agentEvents.clear()
                     for (i in 0 until min(events.length(), 30)) agentEvents.add(events.getJSONObject(i))
                     botRisk = x.optJSONObject("risk")
+                    strategyHealth = x.optJSONObject("performance")
                     serverStatus = serverStatus?.apply { put("autoActive", x.optBoolean("active")) }
                 }
             } catch (_: Exception) { }
+        }
+    }
+    fun refreshDeposit() {
+        if (backendToken.length < 32) { message = "Zuerst Trading-Server verbinden"; return }
+        thread {
+            try {
+                val d = backend("/api/deposit")
+                main.post {
+                    depositAddress = d.optString("address", "").takeIf { it != "null" } ?: ""
+                    depositBalance = if (d.isNull("balanceSol")) null else d.optDouble("balanceSol")
+                    depositReady = d.optBoolean("ready", false)
+                    message = if (depositAddress.isNotBlank()) "Trading-Wallet-Adresse geladen – Solana mainnet"
+                        else "Server hat noch keine separate Trading-Wallet"
+                }
+            } catch (err: Exception) { main.post { message = "Wallet-Abfrage: " + (err.message ?: "").take(90) } }
         }
     }
     fun refreshRealPositions() {
