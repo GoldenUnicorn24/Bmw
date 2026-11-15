@@ -9,6 +9,7 @@ import { researchStatus } from './research/status.mjs';
 import { separateMarketReports } from './research/market-status.mjs';
 import {createWithdrawalService,SOL_MAINNET_GENESIS} from './withdrawal.mjs';
 import {checkJupiterMessage,verifiedProgramIds} from './swapGuard.mjs';
+import {saveDurableJournal,loadJournal} from './durableJournal.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -48,9 +49,7 @@ const address = signer?.publicKey.toBase58() || null;
 if (LIVE && (!signer || !JUPITER_KEY)) throw Error('Live mode requires SOLANA_PRIVATE_KEY_B58 and JUPITER_API_KEY.');
 if (LIVE && REVIEWED_SWAP_PROGRAM_IDS.size===0)
   throw Error('Live signing requires a separately reviewed SWAP_ALLOWED_PROGRAM_IDS allowlist.');
-let journal = [];
-try { journal = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); if (!Array.isArray(journal)) throw Error('Bad log'); }
-catch (err) { if (err.code !== 'ENOENT') throw Error('Cannot load trade journal: ' + err.message); }
+let journal=loadJournal(DATA_FILE);
 let busy = false;
 let activeUntil = 0;
 let exitOnlyUntil = 0;
@@ -75,10 +74,7 @@ const lastConfirmed = new Map();
 let lastStrategyHealth = null;
 
 function saveJournal() {
-  fs.mkdirSync(new URL('.', 'file://' + (DATA_FILE.startsWith('/') ? DATA_FILE : process.cwd() + '/' + DATA_FILE)), { recursive: true, mode: 0o700 });
-  const tmp = DATA_FILE + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(journal.slice(-1000), null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, DATA_FILE);
+  saveDurableJournal(DATA_FILE,journal);
 }
 function reply(res, status, value) {
   const raw = JSON.stringify(value);
