@@ -6,6 +6,8 @@ import bs58 from 'bs58';
 import { confirmedPositions, exitSignal, safetyStatus, shouldHaltForUnknown } from './botPolicy.mjs';
 import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
 import { researchStatus } from './research/status.mjs';
+import { separateMarketReports } from './research/market-status.mjs';
+import {createWithdrawalService,SOL_MAINNET_GENESIS} from './withdrawal.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -23,6 +25,8 @@ const RPC = env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const DATA_FILE = env.TRADE_LOG_PATH || './private/trades.json';
 const STOP_FILE = env.STOP_FILE || './STOP';
 const RESEARCH_REPORT_PATH = env.RESEARCH_REPORT_PATH || '';
+const MEME_RESEARCH_REPORT_PATH = env.MEME_RESEARCH_REPORT_PATH || '';
+const PENNY_RESEARCH_REPORT_PATH = env.PENNY_RESEARCH_REPORT_PATH || '';
 const MAX_TRADE = BigInt(Math.round(Number(env.MAX_TRADE_SOL || '0.01') * 1e9));
 const MAX_DAILY = BigInt(Math.round(Number(env.MAX_DAILY_SPEND_SOL || '0.05') * 1e9));
 const RESERVE = BigInt(Math.round(Number(env.MIN_SOL_RESERVE || '0.02') * 1e9));
@@ -106,6 +110,8 @@ async function rpc(method, params) {
 async function balanceSol() {
   return BigInt((await rpc('getBalance', [address, { commitment: 'confirmed' }])).value);
 }
+const withdrawalSvc=createWithdrawalService({env,signer,rpc,balanceSol,
+  busy:()=>busy,otherActivity:()=>agentCycleRunning||activeUntil>Date.now()||exitOnlyUntil>Date.now()});
 async function tokenBalance(mint) {
   const result = await rpc('getTokenAccountsByOwner', [address, { mint }, { encoding: 'jsonParsed', commitment: 'confirmed' }]);
   return (result.value || []).reduce((sum, account) => {
@@ -165,6 +171,7 @@ async function rugReport(mint) {
     risks: report.risks || [], approved: !reasons.length, reasons };
 }
 function assertCanTrade() {
+  if (withdrawalSvc.uncertain()) throw Error('Withdrawal requires manual blockchain reconciliation');
   if (!LIVE) throw Error('Echtgeldhandel ist serverseitig deaktiviert');
   if (!signer) throw Error('Kein Trading-Wallet auf dem Server');
   if (fs.existsSync(STOP_FILE)) throw Error('STOP-Datei vorhanden: alle Trades gesperrt');
@@ -172,6 +179,8 @@ function assertCanTrade() {
 }
 async function prepareOrder(body, source = 'MANUAL') {
   assertCanTrade();
+  if ((await rpc('getGenesisHash',[])) !== SOL_MAINNET_GENESIS)
+    throw Error('RPC does not point at Solana mainnet-beta');
   const mint = String(body.mint || '');
   new PublicKey(mint);
   const side = String(body.side || 'BUY').toUpperCase();
@@ -250,6 +259,8 @@ async function executeOrder(id, source) {
   try {
   const order = prepared.get(id);
   if (!order) throw Error('Quote abgelaufen oder bereits verwendet');
+  if ((await rpc('getGenesisHash',[])) !== SOL_MAINNET_GENESIS)
+    throw Error('Wrong Solana network before signing');
   prepared.delete(id);
   if (Date.now() - order.created > CONTROL_MAX_AGE_MS) throw Error('Quote ist zu alt');
   const balance = await balanceSol();
@@ -442,11 +453,19 @@ const server = http.createServer(async (req, res) => {
       sessionHours: AUTOPILOT_SESSION_HOURS, strategyHealth: currentPerformance(),
       stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
       maxDailyRealizedLossSol: MAX_REALIZED_LOSS_SOL,
-      risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL), stopped: fs.existsSync(STOP_FILE),
+      risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL),
+      withdrawals:withdrawalSvc.status(), stopped: fs.existsSync(STOP_FILE),
       warning: 'Kein garantierter Profit. Sicherheitsprüfung ersetzt kein Audit.'
     });
     if (req.method === 'GET' && url.pathname === '/api/research/status') {
       return reply(res, 200, researchStatus(RESEARCH_REPORT_PATH));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/research/markets') {
+      return reply(res, 200, separateMarketReports({
+        memePath:MEME_RESEARCH_REPORT_PATH,
+        pennyPath:PENNY_RESEARCH_REPORT_PATH,
+        legacySolanaPath:RESEARCH_REPORT_PATH
+      }));
     }
     if (req.method === 'GET' && url.pathname === '/api/market') return reply(res, 200, {
       tokens: await marketFeed(), promotedFeed: true, source: 'DEX Screener', timestamp: Date.now()
@@ -477,6 +496,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/wallet') return reply(res, 200, {
       address, balanceSol: signer ? Number(await balanceSol()) / 1e9 : null
     });
+    if (req.method === 'GET' && url.pathname === '/api/wallet/withdrawal/status')
+      return reply(res, 200, withdrawalSvc.status());
     if (req.method === 'GET' && url.pathname === '/api/deposit') return reply(res, 200, {
       network: 'Solana mainnet', asset: 'SOL', address,
       balanceSol: signer ? Number(await balanceSol()) / 1e9 : null,
@@ -485,6 +506,14 @@ const server = http.createServer(async (req, res) => {
     });
     if (req.method !== 'POST') return reply(res, 404, { error: 'Route nicht gefunden' });
     const body = await readBody(req);
+    if (url.pathname === '/api/wallet/withdrawal/prepare') {
+      return reply(res, 200, await withdrawalSvc.prepare(body.amountSol,
+        req.headers['x-withdrawal-authorization']));
+    }
+    if (url.pathname === '/api/wallet/withdrawal/execute') {
+      return reply(res, 200, await withdrawalSvc.execute(String(body.previewId||''),
+        req.headers['x-withdrawal-authorization'],body.confirm));
+    }
     if (url.pathname === '/api/ai/signal') {
       const mint = String(body.mint || '');
       new PublicKey(mint);

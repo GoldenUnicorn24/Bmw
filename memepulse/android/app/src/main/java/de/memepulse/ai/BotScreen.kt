@@ -48,7 +48,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 MiniLabel("◈   AI ENGINE / CONTROL CENTER", bright)
-                MiniLabel("v0.6  TRAINING LAB", secondary)
+                MiniLabel("v0.7  DUAL RESEARCH", secondary)
             }
             Spacer(Modifier.height(1.dp))
             Text("Trade smarter.", color = white, fontSize = 30.sp, fontWeight = FontWeight.Black, lineHeight = 34.sp)
@@ -171,9 +171,44 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
             Column(Modifier.fillMaxWidth().padding(17.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text("Statistisches Forschungsmodell", color = white,
+                    Text("Meme- & Penny-Stock-Training", color = white,
                         fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     StatusPill("NUR BEOBACHTUNG", bright)
+                }
+                val studies = s.marketResearchReport?.optJSONObject("markets")
+                if (studies != null) {
+                    listOf(
+                        "SOLANA MEME-COINS" to "solanaMemeCoins",
+                        "US PENNY STOCKS" to "usPennyStocks"
+                    ).forEach { (label, id) ->
+                        val study = studies.optJSONObject(id)
+                        Column(Modifier.fillMaxWidth().background(tile2, RoundedCornerShape(13.dp))
+                            .padding(13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(label, color = bright, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(study?.optString("status", "KEINE DATEN") ?: "KEIN BERICHT",
+                                color = if (study?.optString("status") == "RESEARCH_GATE_PASSED") mint else secondary,
+                                fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Marktbeispiele: " + (study?.optInt("sampleCount", 0) ?: 0),
+                                color = white, fontSize = 12.sp)
+                            val results = study?.optJSONObject("metrics")
+                            val future = results?.optJSONObject("chronological")
+                                ?: results?.optJSONObject("later")
+                            val untrained = results?.optJSONObject("unseenPools")
+                            if (future != null) {
+                                Text("Späterer Zeitraum: " + future.optInt("samples", 0) +
+                                    " Datenpunkte · " + future.optInt("signals", 0) + " Signale",
+                                    color = secondary, fontSize = 11.sp)
+                            }
+                            if (untrained != null) {
+                                Text("Ungesehene Coins/Aktien: " + untrained.optInt("samples", 0) +
+                                    " Datenpunkte", color = secondary, fontSize = 11.sp)
+                            }
+                            if (id == "usPennyStocks") {
+                                Text("Nur Forschung – kein Aktienbroker verbunden, keine echten Aktienkäufe.",
+                                    color = secondary, fontSize = 11.sp)
+                            }
+                        }
+                    }
                 }
                 val report = s.researchReport
                 val status = report?.optString("status") ?: "KEIN BERICHT VERBUNDEN"
