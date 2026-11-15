@@ -1,6 +1,17 @@
-# MemePulse AI v0.2 — Android Trading Terminal (Beta)
+# MemePulse AI v0.3 — Pro Trader Android (Beta)
 
 Independent native Android app plus protected Node trading gateway, stored in a separate folder of the BMW repository. Existing BMW app remains untouched.
+
+## Neu in v0.3
+
+- Neuer nativer **KI-Bot-Tab** mit getrennten Aktionen für PAPER und Echtgeld, Grok-Status, Bot-Ereignissen und Not-Aus.
+- **KI-Paper-Autotrading** mit Echtkursen, Grok + RugCheck-Freigabe, Positions-/Tageslimit und regelbasierten Exits. Ohne verbundenes Grok keine automatischen Käufe.
+- **RugCheck-Sicherheitskorrektur**: Roh-Risikowert und vollständige Mint-/Freeze-Berechtigungen statt fraglicher normalisierter Score-Richtung.
+- Serielle Swap-Ausführung und Handelsstopp bei unklaren/inkonsistenten Blockchain-Fills.
+- Docker-Backend nur an localhost, verbesserte Tests und separate Android-APK v0.3.
+- **[Deutsche Schritt-für-Schritt-Einrichtung](SETUP-DE.md)**.
+
+**Stand:** Quellcode + Debug-Build. Keine Server-Instanz oder Wallet wurde im Chat eingerichtet; ohne eigene Grok- und Wallet-API-Verbindung läuft noch kein Echtgeldhandel. Code ist nicht auditiert, kein garantierter Stop Loss oder Profit.
 
 ## Features
 - Native Android UI: Jetpack Compose, dark trading terminal, Android 8.0+
@@ -13,7 +24,7 @@ Independent native Android app plus protected Node trading gateway, stored in a 
 - GitHub Actions builds a separate debug APK without replacing the BMW application.
 
 ## Android APK
-GitHub -> Actions -> "MemePulse AI - Android APK" -> latest successful run -> Artifacts -> MemePulseAI-Android-v0.2-debug-APK. Download the artifact archive and extract its APK.
+GitHub -> Actions -> "MemePulse AI - Android APK" -> latest successful run -> Artifacts -> MemePulseAI-Android-v0.3-debug-APK. Download the artifact archive and extract its APK.
 
 To build locally: JDK 17, Android SDK platform 35, Gradle 8.12.
 cd memepulse/android
