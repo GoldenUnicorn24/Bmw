@@ -9,10 +9,16 @@ test('market score uses explicit metrics', () => {
   assert.deepEqual(marketRejectReasons(market), []);
   assert.ok(marketRejectReasons({ ...market, liquidityUsd: 100 }).length);
 });
-test('rug score fails closed when unavailable or critical', () => {
+test('rug report fails closed on missing authorities, raw risk and danger flags', () => {
+  const clean = { score: 125, score_normalised: 80, risks: [],
+    token: { mintAuthority: null, freezeAuthority: null } };
+  assert.deepEqual(rugRejectReasons(clean), []);
   assert.ok(rugRejectReasons(null).length);
-  assert.ok(rugRejectReasons({ score_normalised: 75, risks: [{ level: 'danger' }] }).length);
-  assert.deepEqual(rugRejectReasons({ score_normalised: 80, risks: [] }), []);
+  assert.ok(rugRejectReasons({ ...clean, score: 2200 }).length);
+  assert.ok(rugRejectReasons({ ...clean, risks: [{ level: 'DANGER' }] }).length);
+  assert.ok(rugRejectReasons({ ...clean, token: { mintAuthority: 'abc', freezeAuthority: null } }).length);
+  assert.ok(rugRejectReasons({ ...clean, token: null }).length);
+  assert.ok(rugRejectReasons({ ...clean, score: NaN }).length);
 });
 test('buy requires allowlist and respects trade ceiling and daily cap', () => {
   const config = { side: 'BUY', mint: 'good', amountLamports: 8_000_000n, allowlist: new Set(['good']),
