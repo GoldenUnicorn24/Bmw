@@ -308,22 +308,62 @@ async function scanAndExplain(mint) {
   return { ...signal, eligible: validateSignal(signal, mint), market, safety };
 }
 async function agentCycle() {
-  if (!AUTO_ALLOWED || !LIVE || !activeUntil || Date.now() >= activeUntil) { activeUntil = 0; return; }
+  if (!AUTO_ALLOWED || !LIVE || !activeUntil || Date.now() >= activeUntil) {
+    if (activeUntil) agentEvent('SESSION_EXPIRED', 'Automatischer Handel nach 30 Minuten beendet');
+    activeUntil = 0;
+    return;
+  }
+  if (fs.existsSync('./STOP')) { activeUntil = 0; agentEvent('STOPPED', 'STOP-Datei erkannt'); return; }
   if (busy || Date.now() - lastAutoCycle < 90000) return;
   lastAutoCycle = Date.now();
+  const halt = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
+  if (halt.halted) { activeUntil = 0; agentEvent('RISK_HALT', halt.reasons.join('; ')); return; }
+
+  // Exits take priority; LLM cannot override price-based loss/profit rules.
+  const holdings = confirmedPositions(journal).positions.filter(p => p.autoOwned);
+  for (const p of holdings) {
+    if (Date.now() - (lastExitAttempt.get(p.mint) || 0) < 120000) continue;
+    try {
+      const market = await marketFor(p.mint);
+      const exit = exitSignal(p.entryPriceUsd, market?.priceUsd, STOP_LOSS_PCT, TAKE_PROFIT_PCT);
+      lastAgentObservation = { at: Date.now(), mint: p.mint, action: exit ? exit.reason : 'MONITOR',
+        priceUsd: market?.priceUsd || null, entryPriceUsd: p.entryPriceUsd };
+      if (!exit) continue;
+      lastExitAttempt.set(p.mint, Date.now());
+      agentEvent('EXIT_TRIGGER', p.mint.slice(0, 12) + ': ' + exit.reason + ' ' + exit.changePct.toFixed(1) + '%');
+      const order = await prepareOrder({ side: 'SELL', mint: p.mint, percent: 100 }, 'GROK_EXIT');
+      await executeOrder(order.previewId, 'GROK_EXIT');
+      return;
+    } catch (err) {
+      lastAgentError = String(err.message).slice(0, 220);
+      agentEvent('EXIT_SKIPPED', lastAgentError);
+      // Exit failure must not lead to fresh entries in this cycle.
+      return;
+    }
+  }
+  if (holdings.length >= MAX_OPEN_POSITIONS) return;
   for (const mint of ALLOWLIST) {
-    if (Date.now() >= activeUntil) return;
+    if (Date.now() >= activeUntil || fs.existsSync('./STOP')) return;
     if (cooldown.get(mint) && Date.now() - cooldown.get(mint) < 86400000) continue;
+    if (journal.some(t => t.side === 'BUY' && t.mint === mint && t.at > Date.now() - 86400000 &&
+      ['SUBMITTED', 'SUCCESS', 'UNKNOWN'].includes(t.status))) continue;
     try {
       const result = await scanAndExplain(mint);
+      lastAgentObservation = { at: Date.now(), mint, action: result.action,
+        confidence: result.confidence || 0, reason: result.reason, eligible: !!result.eligible };
+      agentEvent(result.eligible ? 'BUY_SIGNAL' : 'HOLD_SIGNAL', mint.slice(0, 12) + ' · ' + (result.reason || 'Kein Signal'));
       if (!result.eligible) continue;
       const preview = await prepareOrder({ side: 'BUY', mint, amountSol: Number(MAX_TRADE) / 1e9 }, 'GROK');
       if (Date.now() >= activeUntil || fs.existsSync('./STOP')) return;
       await executeOrder(preview.previewId, 'GROK');
-      return; // only one trade per scan cycle
-    } catch (err) { console.error('Agent cycle skipped:', String(err.message).slice(0, 180)); }
+      return; // Only one transaction per cycle.
+    } catch (err) {
+      lastAgentError = String(err.message).slice(0, 220);
+      agentEvent('SCAN_SKIPPED', lastAgentError);
+    }
   }
 }
+
 setInterval(() => { if (activeUntil) agentCycle().catch(err => console.error('Agent:', err.message)); }, 90000).unref();
 const server = http.createServer(async (req, res) => {
   if (req.url === '/health' && req.method === 'GET') return reply(res, 200, { ok: true, name: 'MemePulse API', realTradesEnabled: LIVE });
@@ -334,13 +374,36 @@ const server = http.createServer(async (req, res) => {
       live: LIVE, autoAllowed: AUTO_ALLOWED, autoActive: activeUntil > Date.now(), autoExpiresAt: activeUntil || null,
       grokConnected: !!GROK_KEY, wallet: address, whitelistedMints: [...ALLOWLIST],
       maxTradeSol: Number(MAX_TRADE) / 1e9, maxDailySpendSol: Number(MAX_DAILY) / 1e9,
-      maxOrdersPerDay: MAX_ORDERS, stopped: fs.existsSync('./STOP'),
+      maxOrdersPerDay: MAX_ORDERS, maxOpenPositions: MAX_OPEN_POSITIONS,
+      stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
+      maxDailyRealizedLossSol: MAX_REALIZED_LOSS_SOL,
+      risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL), stopped: fs.existsSync('./STOP'),
       warning: 'Kein garantierter Profit. Sicherheitsprüfung ersetzt kein Audit.'
     });
     if (req.method === 'GET' && url.pathname === '/api/market') return reply(res, 200, {
       tokens: await marketFeed(), promotedFeed: true, source: 'DEX Screener', timestamp: Date.now()
     });
     if (req.method === 'GET' && url.pathname === '/api/trades') return reply(res, 200, { trades: journal.slice(-80).reverse() });
+    if (req.method === 'GET' && url.pathname === '/api/agent') return reply(res, 200, {
+      active: Date.now() < activeUntil && !fs.existsSync('./STOP'),
+      expiresAt: activeUntil || null, lastObservation: lastAgentObservation,
+      lastError: lastAgentError, events: agentEvents,
+      limits: { stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
+        maxDailyRealizedLossSol: MAX_REALIZED_LOSS_SOL, maxOpenPositions: MAX_OPEN_POSITIONS },
+      risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL)
+    });
+    if (req.method === 'GET' && url.pathname === '/api/portfolio') {
+      const ledger = confirmedPositions(journal);
+      const positions = await Promise.all(ledger.positions.map(async p => {
+        try { const market = await marketFor(p.mint); return { ...p, markPriceUsd: market?.priceUsd || null,
+          estimatedChangePct: p.entryPriceUsd > 0 && market?.priceUsd ? (market.priceUsd / p.entryPriceUsd - 1) * 100 : null,
+          unrealizedPnlNote: 'Nur Schätzung auf Basis DEX-Preisen; keine ausführbare Quote' }; }
+        catch { return { ...p, markPriceUsd: null, estimatedChangePct: null }; }
+      }));
+      return reply(res, 200, { positions, realized: ledger.realized.slice(-30),
+        risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL),
+        note: 'Ohne Wallet-Transaktionen außerhalb dieser App. SOL-Gebühren, Transfers und Sell Slippage sind nicht bilanziert.' });
+    }
     if (req.method === 'GET' && url.pathname === '/api/wallet') return reply(res, 200, {
       address, balanceSol: signer ? Number(await balanceSol()) / 1e9 : null
     });
@@ -360,12 +423,18 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/agent/start') {
       if (!AUTO_ALLOWED || !LIVE || !GROK_KEY || !ALLOWLIST.size) throw Error('Autonomes Trading nicht vollständig freigeschaltet');
+      const safety = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
+      if (safety.halted) throw Error('Bot wegen Risikostopp blockiert: ' + safety.reasons.join('; '));
+      if (fs.existsSync('./STOP')) throw Error('STOP-Datei blockiert den Bot');
       if (body.confirm !== 'ACTIVATE AUTOMATIC LIVE TRADING') throw Error('Autonome Bestätigung fehlt');
       activeUntil = Date.now() + 30 * 60 * 1000; // User must renew; never persists across restarts.
+      agentEvent('ACTIVATED', 'Benutzer aktivierte eine 30-Minuten-Session');
+      setImmediate(() => agentCycle().catch(e => { lastAgentError = e.message; agentEvent('ERROR', e.message); }));
       return reply(res, 200, { active: true, expiresAt: activeUntil, note: 'Auto-Käufe nur aus Allowlist und innerhalb Limits' });
     }
     if (url.pathname === '/api/agent/stop') {
       activeUntil = 0;
+      agentEvent('MANUAL_STOP', 'Stop über API ausgelöst');
       return reply(res, 200, { active: false, note: 'Gestoppt; ein bereits gesendeter Swap kann nicht rückgängig gemacht werden.' });
     }
     return reply(res, 404, { error: 'Route nicht gefunden' });
