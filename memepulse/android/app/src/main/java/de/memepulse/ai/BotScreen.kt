@@ -133,6 +133,8 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
                 Text("NUR native SOL an eine zuvor von dir kontrollierte, unabhängig geprüfte Adresse senden. Nie SOL an unbekannte Adressen einzahlen. Eine Einzahlung startet keine Trades.",
                     color = danger, fontSize = 11.sp, lineHeight = 15.sp)
+                Text("WICHTIG: Noch keine Auszahlungsfunktion in dieser Beta. Nicht einzahlen, bevor du selbst einen überprüften, sicheren Weg zur Rücküberweisung aus deiner Wallet besitzt.",
+                    color = danger, fontSize = 11.sp, lineHeight = 15.sp)
                 s.botRisk?.let { r ->
                     BotLine("Risikostopp", if (r.optBoolean("halted")) "AKTIV" else "NICHT AUSGELÖST",
                         if (r.optBoolean("halted")) danger else mint)
