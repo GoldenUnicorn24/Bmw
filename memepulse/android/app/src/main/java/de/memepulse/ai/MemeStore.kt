@@ -73,6 +73,7 @@ class MemeStore(context: Context) {
     var serverStatus by mutableStateOf<JSONObject?>(null)
     var pendingPreview by mutableStateOf<JSONObject?>(null)
     var aiSignal by mutableStateOf<JSONObject?>(null)
+    var candidateReview by mutableStateOf<JSONObject?>(null)
     var selectedCoin by mutableStateOf<Coin?>(null)
     var tradeSol by mutableStateOf("0.005")
     var tradeUsd by mutableStateOf("10")
@@ -145,7 +146,7 @@ class MemeStore(context: Context) {
             val pct = (fresh.price / p.entry - 1.0) * 100
             if (pct <= -12.0 || pct >= 25.0) {
                 paperSell(p)
-                message = "Paper-Autobot: " + if (pct <= -12.0) "Stop-Loss" else "Take-Profit" + " für " + p.symbol
+                message = "Paper-Autobot: " + (if (pct <= -12.0) "Stop-Loss" else "Take-Profit") + " für " + p.symbol
                 return
             }
         }
@@ -166,6 +167,7 @@ class MemeStore(context: Context) {
     fun setPaperAuto(value: Boolean) {
         paperAutoEnabled = value
         prefs.edit().putBoolean("paperAuto", value).apply()
+        if (value && realMarket) paperAutoTick()
         message = if (value) "Regelbasierter Paper-Autobot an (kein Echtgeld)" else "Paper-Autobot deaktiviert"
     }
     fun resetPaper() {
@@ -365,6 +367,31 @@ class MemeStore(context: Context) {
                 }
             } catch (e: Exception) { main.post { message = "Live-Status: " + (e.message ?: "nicht erreichbar").take(80) } }
         }
+    }
+    fun reviewToken(c: Coin) {
+        if (!c.live || !realMarket) { message = "Demo-Coins können nicht freigegeben werden"; return }
+        async {
+            val result = backend("/api/allowlist/check", JSONObject().put("mint", c.mint))
+            main.post { candidateReview = result; selectedCoin = c; message =
+                if (result.optBoolean("approved")) "Token geprüft: Freigabe möglich" else "Token wegen Sicherheitsregeln abgelehnt" }
+        }
+    }
+    fun approveToken() {
+        val mint = candidateReview?.optString("mint") ?: return
+        if (candidateReview?.optBoolean("approved") != true) return
+        candidateReview = null
+        async {
+            backend("/api/allowlist/add", JSONObject().put("mint", mint)
+                .put("confirm", "I REVIEWED THIS TOKEN: " + mint))
+            main.post { message = "Token zur KI-Freigabeliste hinzugefügt" }
+            refreshLiveStatus()
+        }
+    }
+    fun removeToken(mint: String) = async {
+        backend("/api/allowlist/remove", JSONObject().put("mint", mint)
+            .put("confirm", "REMOVE TOKEN: " + mint))
+        main.post { message = "Token von KI-Freigabeliste entfernt" }
+        refreshLiveStatus()
     }
     fun analyze(c: Coin) {
         if (!c.live || !realMarket) { message = "Nur echte Mint-Adressen analysieren"; return }
