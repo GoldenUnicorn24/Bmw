@@ -1,0 +1,38 @@
+name: MemePulse v0.8 - Read-only live API smoke
+on:
+  push:
+    branches:
+      - feature/memepulse-v08-live-safety-and-meme-data
+    paths:
+      - ".github/workflows/memepulse-readonly-mainnet-smoke.yml"
+      - "memepulse/backend/scripts/read-only-mainnet-smoke.mjs"
+      - "memepulse/backend/swapGuard.mjs"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-mainnet-quote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      ENABLE_LIVE_TRADES: "NO"
+      ALLOW_AUTONOMOUS_LIVE: "NO"
+      ENABLE_WALLET_WITHDRAWALS: "NO"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install backend dependencies without scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
+        working-directory: memepulse/backend
+      - name: Verify public mainnet genesis and keyless Jupiter quote (no taker/signer)
+        working-directory: memepulse/backend
+        run: npm run smoke:mainnet:readonly
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MemePulse-v08-read-only-mainnet-connectivity
+          path: memepulse/backend/research-output/read-only-mainnet/
+          retention-days: 30
+          if-no-files-found: warn
