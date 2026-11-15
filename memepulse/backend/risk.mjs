@@ -26,12 +26,27 @@ export function marketRejectReasons(t, minScore = 75) {
   return reasons;
 }
 
+// RugCheck raw score is an aggregate *risk* score: LOWER is safer.
+// Never use score_normalised for live authorization; its direction is inconsistently documented.
+// Fail closed on unavailable reports or unknown authorities.
 export function rugRejectReasons(report) {
-  if (!report || !Number.isFinite(Number(report.score_normalised))) return ['RugCheck nicht verfügbar'];
+  if (!report || !Number.isFinite(Number(report.score)) || Number(report.score) < 0)
+    return ['RugCheck-Rohwert nicht verfügbar'];
   const reasons = [];
-  if (Number(report.score_normalised) < 70) reasons.push('RugCheck-Wert unter 70');
-  if ((report.risks || []).some(r => ['danger', 'critical'].includes(String(r.level || '').toLowerCase()))) {
-    reasons.push('Kritischer Token-Risikohinweis');
+  const raw = Number(report.score);
+  if (raw > 800) reasons.push('RugCheck-Rohwert über konservativer Risikogrenze');
+  if (!Array.isArray(report.risks)) reasons.push('Token-Risiken unvollständig');
+  else if (report.risks.some(r => ['danger', 'critical'].includes(String(r.level || '').toLowerCase())))
+    reasons.push('Kritische Sicherheitswarnung von RugCheck');
+  // Full report is mandatory for permission checks. The /summary endpoint alone
+  // cannot prove whether an arbitrary mint or freeze authority was revoked.
+  if (!report.token || typeof report.token !== 'object')
+    reasons.push('Mint-/Freeze-Berechtigungen nicht bestätigt');
+  else {
+    if (report.token.mintAuthority) reasons.push('Mint Authority ist aktiv');
+    if (report.token.freezeAuthority) reasons.push('Freeze Authority ist aktiv');
+    if (!('mintAuthority' in report.token) || !('freezeAuthority' in report.token))
+      reasons.push('Token-Berechtigungen unvollständig');
   }
   return reasons;
 }
