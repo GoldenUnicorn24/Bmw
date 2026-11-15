@@ -3,7 +3,7 @@
 ## 1. Android App installieren
 1. Github -> GoldenUnicorn24/Bmw -> Actions -> **MemePulse AI - Android APK**.
 2. Einen **erfolgreichen** Lauf auf Branch **feature/memepulse-v03-pro-trader** öffnen.
-3. Artifacts -> **MemePulseAI-Android-v0.2-debug-APK** herunterladen, ZIP entpacken und APK installieren.
+3. Artifacts -> **MemePulseAI-Android-v0.3-debug-APK** herunterladen, ZIP entpacken und APK installieren.
 4. Erster Start: **PAPER** und frei erfundene Demo-Coins. Im Radar auf **Live-Kurse abrufen** tippen.
 5. Manuelle Paper-Käufe/Verkäufe funktionieren ohne Wallet und ohne Backend.
 
