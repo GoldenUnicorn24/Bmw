@@ -59,7 +59,7 @@ class MemeStore(context: Context) {
     val realTrades = mutableStateListOf<JSONObject>()
     val equityPoints = mutableStateListOf<Double>()
     var cash by mutableDoubleStateOf(1000.0)
-    var message by mutableStateOf("Bereit · Paper Trading")
+    var message by mutableStateOf("Marktdaten werden geladen · echte Orders serverseitig gesperrt")
     var marketLoading by mutableStateOf(false)
     var realMarket by mutableStateOf(false)
     var marketTimestamp by mutableLongStateOf(0L)
@@ -88,18 +88,7 @@ class MemeStore(context: Context) {
 
     init {
         restore()
-        if (paperMode) seedDemo() else refreshMarket()
-    }
-    private fun seedDemo() {
-        coins.clear()
-        coins.addAll(listOf(
-            Coin("demo-dova", "DOVA", "DogeNova (DEMO)", .00284, 8.2, 348000.0, 1820000.0, 1280.0, 286.0, 123.0, false),
-            Coin("demo-mfrg", "MFRG", "MoonFrog (DEMO)", .0000924, 5.7, 153000.0, 722000.0, 467.0, 137.0, 92.0, false),
-            Coin("demo-pupx", "PUPX", "PixelPup (DEMO)", .0132, -2.3, 97000.0, 480000.0, 3100.0, 124.0, 107.0, false),
-            Coin("demo-rcat", "RCAT", "RocketCat (DEMO)", .0781, -6.1, 24000.0, 68000.0, 95.0, 38.0, 94.0, false)
-        ))
-        realMarket = false
-        marketTimestamp = 0
+        refreshMarket()
     }
     fun equity(): Double = cash + positions.sumOf { p -> p.quantity * (coins.find { it.mint == p.mint }?.price ?: p.entry) }
     fun unrealized(): Double = positions.sumOf { p -> p.quantity * (coins.find { it.mint == p.mint }?.price ?: p.entry) - p.invested }
@@ -268,15 +257,6 @@ class MemeStore(context: Context) {
                 message = "Mint-Suche: " + (err.message ?: "Netzwerkfehler").take(120)
             } }
         }
-    }
-    fun simulateDemoTick() {
-        if (realMarket) return
-        for (i in coins.indices) {
-            val c = coins[i]
-            val v = (Random.nextDouble() - .5) * .025
-            coins[i] = c.copy(price = max(.0000000001, c.price * (1 + v)), change1h = c.change1h + v * 100)
-        }
-        recordEquity()
     }
     fun setSimulationMode(enabled: Boolean) {
         if (paperMode == enabled) return
