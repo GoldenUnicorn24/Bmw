@@ -61,12 +61,12 @@ private fun MemePulse(s: MemeStore) {
         background = Background, surface = Panel, onSurface = White,
         onBackground = White, error = Red
     )
-    // Live data is refreshed only while this UI is alive; a backend is required for 24/7 operation.
-    LaunchedEffect(s.realMarket, s.paperBotEnabled) {
+    // Refresh only true DEX quotes; fake demo ticks are intentionally removed.
+    LaunchedEffect(s.paperBotEnabled, s.activePage) {
         while (true) {
-            delay(if (s.paperBotEnabled) 45000 else if (s.realMarket) 90000 else 7000)
-            if (s.paperBotEnabled || (s.realMarket && s.activePage == 1)) s.refreshMarket()
-            else if (!s.realMarket && (s.activePage == 0 || s.activePage == 1)) s.simulateDemoTick()
+            delay(if (s.paperBotEnabled) 45000 else 90000)
+            if (s.activePage <= 2 || s.paperBotEnabled) s.refreshMarket()
+            if (s.activePage == 2 && !s.paperMode) s.refreshRemoteBot()
         }
     }
     MaterialTheme(colorScheme = scheme) {
@@ -146,7 +146,7 @@ private fun Header(s: MemeStore) {
                 }
             }
             Surface(color = if (s.paperMode) Panel2 else Color(0xFF38262C), shape = RoundedCornerShape(12.dp)) {
-                Text(if (s.paperMode) "● PAPER" else "● REAL MODE", modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                Text(if (s.paperMode) "● SIMULATION" else if (s.serverStatus?.optBoolean("live") == true) "● REAL" else "○ REAL GESPERRT", modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     color = if (s.paperMode) Green else Red, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -158,58 +158,85 @@ private fun Header(s: MemeStore) {
 private fun Dashboard(s: MemeStore) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF2B2344), Panel)), RoundedCornerShape(22.dp))
-            .border(1.dp, Color(0xFF50426C), RoundedCornerShape(22.dp)).padding(20.dp)) {
+        Column(Modifier.fillMaxWidth().background(Brush.linearGradient(
+            listOf(Color(0xFF2C264E), Color(0xFF121A30), Panel)), RoundedCornerShape(24.dp))
+            .border(1.dp, Color(0xFF534878), RoundedCornerShape(24.dp)).padding(20.dp)) {
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Caption("PAPER PORTFOLIO", color = Muted)
-                Caption(if (s.realMarket) "● LIVE-KURSE" else "● DEMO-KURSE", color = if (s.realMarket) Green else Violet)
+                Caption(if (s.paperMode) "SIMULATION · PAPER EQUITY" else "ECHTGELD · SOLANA WALLET", color = Muted)
+                Caption(if (s.realMarket) "● LIVE MARKT" else "○ KURSE LADEN", color = if (s.realMarket) Green else Violet)
             }
-            Spacer(Modifier.height(8.dp))
-            Text(usd(s.equity()), color = White, fontSize = 34.sp, fontWeight = FontWeight.Black)
-            val net = (s.equity() / 1000.0 - 1.0) * 100
-            Text(signed(net) + " seit Start · Simuliert", color = if (net >= 0) Green else Red, fontSize = 13.sp)
-            Spacer(Modifier.height(20.dp))
-            EquityChart(s.equityPoints.toList() + s.equity())
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Caption("Kein Bank- oder Wallet-Guthaben", color = Muted)
-                Caption("SIMULATION", color = Violet)
+            Spacer(Modifier.height(12.dp))
+            if (s.paperMode) {
+                Text(usd(s.equity()), color = White, fontSize = 35.sp, fontWeight = FontWeight.Black)
+                val perf = (s.equity() / 1000.0 - 1.0) * 100
+                Text(signed(perf) + " · simulierte Performance", color = if (perf >= 0) Green else Red, fontSize = 12.sp)
+                Spacer(Modifier.height(15.dp))
+                EquityChart(s.equityPoints.toList() + s.equity())
+                Spacer(Modifier.height(6.dp))
+                Caption("Fiktive Orderausführungen, keine Echtgeldrendite", color = Muted)
+            } else {
+                Text(s.realSolBalance?.let {
+                    String.format(java.util.Locale.US, "%.5f SOL", it)
+                } ?: "— SOL", color = White, fontSize = 35.sp, fontWeight = FontWeight.Black)
+                Text(if (s.serverStatus?.optBoolean("live") == true) "● Trading-Server ist für Echtgeld konfiguriert"
+                    else "○ Echtgeld-Ausführung gesperrt · Server einrichten",
+                    color = if (s.serverStatus?.optBoolean("live") == true) Red else Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(18.dp))
+                Text(s.serverStatus?.optString("wallet")?.takeIf { it.length > 15 }?.let {
+                    "WALLET  " + it.take(7) + "…" + it.takeLast(6)
+                } ?: "Noch keine Trading-Wallet verbunden",
+                    color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = { s.refreshRealPositions(); s.refreshRemoteBot() }) {
+                    Text("↻ Wallet & Botstatus aktualisieren", color = Violet)
+                }
+                Caption("Kein Live-P&L aus Schätzpreisen erfunden. Balance in SOL.", color = Muted)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.weight(1f)) { Metric("REALISIERT", usd(s.realized()), if (s.realized() >= 0) Green else Red) }
-            Box(Modifier.weight(1f)) { Metric("OFFENE P&L", usd(s.unrealized()), if (s.unrealized() >= 0) Green else Red) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.weight(1f)) { Metric("WIN RATE", signed(s.winrate()).removePrefix("+"), White) }
-            Box(Modifier.weight(1f)) { Metric("POSITIONEN", s.positions.size.toString() + " / 3", White) }
+        if (s.paperMode) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) { Metric("SIM. REALISIERT", usd(s.realized()), if (s.realized() >= 0) Green else Red) }
+                Box(Modifier.weight(1f)) { Metric("SIM. OFFEN", usd(s.unrealized()), if (s.unrealized() >= 0) Green else Red) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) { Metric("PAPER WIN RATE", signed(s.winrate()).removePrefix("+"), White) }
+                Box(Modifier.weight(1f)) { Metric("PAPER POSITIONEN", s.positions.size.toString() + "/3", White) }
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) { Metric("REAL POSITIONEN", s.realPositions.size.toString(), White) }
+                Box(Modifier.weight(1f)) { Metric("LIVE BOT", if (s.serverStatus?.optBoolean("autoActive") == true) "AKTIV" else "AUS",
+                    if (s.serverStatus?.optBoolean("autoActive") == true) Red else Muted) }
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(17.dp))
                 .clickable { s.activePage = 2 }.padding(16.dp)) {
             Column {
-                Text("◈  GROK AUTOPILOT", color = White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(if (s.paperBotEnabled) "Paper-Agent handelt nach Risikoregeln"
-                    else "KI-Zentrale öffnen und Strategie testen", color = Muted, fontSize = 11.sp)
+                Text("◈  MEMEPULSE AUTOPILOT", color = White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("Eigene, transparente Quant-Strategie", color = Muted, fontSize = 11.sp)
             }
-            Text(if (s.paperBotEnabled) "● AKTIV" else "ÖFFNEN ›", color = if (s.paperBotEnabled) Green else Violet,
-                fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Text("KI-BOT ›", color = Violet, fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
-        SectionHeader("KI-Übersicht", "SIGNAL / RISIKO")
+        SectionHeader("Trading-Engine", "INTEGRIERT · OHNE API-KEY")
         Surface(color = Panel, shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("◉ Grok-Analyse", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text("Die KI bewertet ausgewählte Coins. Die Entscheidung zum Kauf muss zusätzlich sämtliche Sicherheits- und Einsatzregeln bestehen.", color = Muted, fontSize = 12.sp)
-                Text(if (s.serverStatus?.optBoolean("grokConnected") == true) "● GROK API VERBUNDEN" else "○ GROK NICHT VERBUNDEN",
-                    color = if (s.serverStatus?.optBoolean("grokConnected") == true) Green else Violet, fontSize = 11.sp)
-                Text(if (s.serverStatus?.optBoolean("autoActive") == true) "AUTO LIVE: AKTIV" else "AUTO LIVE: AUS",
-                    color = if (s.serverStatus?.optBoolean("autoActive") == true) Red else Muted, fontSize = 11.sp)
+                Text("◉ Quant Engine 1.0", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Bewertet 5m/1h/6h-Trends, Liquidität, Umsatz und Kaufdruck. Ein Kaufsignal muss zusätzlich unabhängige Token-Sicherheitsprüfungen bestehen.",
+                    color = Muted, fontSize = 12.sp)
+                Text(if (s.paperMode && s.paperBotEnabled) "● SIMULIERTE AUTO-TRADES AKTIV"
+                    else if (s.serverStatus?.optBoolean("autoActive") == true) "● ECHTGELD-BOT AKTIV"
+                    else "○ AUTONOME ORDERS AUS",
+                    color = if (s.paperBotEnabled || s.serverStatus?.optBoolean("autoActive") == true) Green else Muted,
+                    fontSize = 11.sp)
+                Caption("Regelbasiertes Modell – keine trainierte Profitprognose.", color = Muted)
             }
         }
-        SectionHeader("Market Radar", if (s.realMarket) "DEX SCREENER · PROMOTED FEED" else "DEMO")
+        SectionHeader("Solana Radar", if (s.realMarket) "DEX SCREENER · LIVE" else "KEINE KURSE")
+        if (s.coins.isEmpty()) Hint("Live-Marktdaten werden geladen. Bei einem Verbindungsfehler im Radar erneut abrufen.")
         s.coins.sortedByDescending { it.score }.take(5).forEach { TokenCard(it, s, compact = true) }
         Button(onClick = { s.activePage = 1 }, modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Panel2)) { Text("Alle Token anzeigen", color = Violet) }
+            colors = ButtonDefaults.buttonColors(containerColor = Panel2)) { Text("Token-Radar öffnen", color = Violet) }
     }
 }
 @Composable
@@ -237,12 +264,11 @@ private fun Radar(s: MemeStore) {
     val shown = s.coins.filter { it.symbol.contains(query, true) || it.name.contains(query, true) || it.mint.contains(query, true) }
         .filter { !minScore || it.score >= 75 }.sortedByDescending { it.score }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        SectionHeader("Token entdecken", if (s.realMarket) "SOLANA · AKTUELLE KURSE" else "OFFLINE DEMO")
+        SectionHeader("Token entdecken", if (s.realMarket) "SOLANA · AKTUELLE KURSE" else "LIVE-DATEN LADEN")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { s.refreshMarket() }, enabled = !s.marketLoading, modifier = Modifier.weight(1f)) {
                 Text(if (s.marketLoading) "Lade ..." else "↻ Live-Kurse abrufen", fontSize = 12.sp)
             }
-            OutlinedButton(onClick = { s.useDemo() }) { Text("Demo", fontSize = 12.sp) }
         }
         Spacer(Modifier.height(7.dp))
         Text("Die Live-Liste stammt aus einem Feed mit beworbenen Coins – keine sichere Kaufempfehlung.",
@@ -250,6 +276,10 @@ private fun Radar(s: MemeStore) {
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
             label = { Text("Coin oder Mint-Adresse suchen") }, singleLine = true)
+        if (query.trim().length in 32..44) {
+            OutlinedButton(onClick = { s.lookupMint(query.trim()) }, enabled = !s.marketLoading,
+                modifier = Modifier.fillMaxWidth()) { Text("⌕ Solana Mint-Adresse online prüfen", color = Violet) }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = minScore, onCheckedChange = { minScore = it })
             Text("Nur Markt-Score ≥ 75", color = White, fontSize = 12.sp)
@@ -259,7 +289,7 @@ private fun Radar(s: MemeStore) {
         s.aiSignal?.let {
             Surface(color = Panel2, shape = RoundedCornerShape(15.dp)) {
                 Column(Modifier.padding(12.dp)) {
-                    Text("GROK: " + it.optString("action", "HOLD"), color = if (it.optString("action") == "BUY") Green else Violet, fontWeight = FontWeight.Bold)
+                    Text("ENGINE: " + it.optString("action", "HOLD"), color = if (it.optString("action") == "BUY") Green else Violet, fontWeight = FontWeight.Bold)
                     Text(it.optString("reason", "Keine Analyse"), color = Muted, fontSize = 12.sp)
                     Text("Nicht als Kaufempfehlung oder Sicherheitsgarantie verstehen.", color = Muted, fontSize = 10.sp)
                 }
@@ -307,7 +337,7 @@ private fun TokenCard(c: Coin, s: MemeStore, compact: Boolean) {
                         Text(if (s.paperMode) "Paper Buy" else "REAL Vorschau", color = Background, fontSize = 12.sp)
                     }
                     OutlinedButton(onClick = { s.analyze(c) }, enabled = c.live && !s.requesting) {
-                        Text("Grok prüfen", fontSize = 12.sp)
+                        Text("Signal prüfen", fontSize = 12.sp)
                     }
                 }
             }
@@ -318,7 +348,8 @@ private fun TokenCard(c: Coin, s: MemeStore, compact: Boolean) {
 private fun Positions(s: MemeStore) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader("Paper-Portfolio", s.positions.size.toString() + " OFFENE POSITIONEN")
+        if (s.paperMode) {
+        SectionHeader("Simulations-Portfolio", s.positions.size.toString() + " OFFENE POSITIONEN")
         Text("Papier-Guthaben: " + usd(s.cash) + " · simulierte Kosten: 0,8 % je Seite", color = Muted, fontSize = 12.sp)
         if (s.positions.isEmpty()) Hint("Noch keine Paper-Positionen. Öffne den Token-Radar.")
         s.positions.toList().forEach { pos ->
@@ -337,6 +368,8 @@ private fun Positions(s: MemeStore) {
                 }
             }
         }
+        }
+        if (!s.paperMode) {
         SectionHeader("Echte Wallet-Positionen", "SOLANA · BACKEND")
         Text("Nicht Teil des simulierten Portfolios. Basis: bestätigte Swaps dieses Trading-Servers.",
             color = Muted, fontSize = 11.sp)
@@ -374,6 +407,8 @@ private fun Positions(s: MemeStore) {
                 }
             }
         }
+        }
+        if (s.paperMode) {
         SectionHeader("Paper-Journal", s.fills.size.toString() + " ORDERS")
         s.fills.take(30).forEach { f ->
             Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(12.dp)).padding(12.dp),
@@ -384,33 +419,39 @@ private fun Positions(s: MemeStore) {
                 Text(usd(f.amount), color = Muted)
             }
         }
+        }
     }
 }
 @Composable
 private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SectionHeader("Trading Modus", "DEFAULT: PAPER")
+        SectionHeader("Betriebsmodus", "STANDARD: ECHTGELD · GESPERRT")
         Surface(color = Panel, shape = RoundedCornerShape(17.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Trades: " + if (s.paperMode) "PAPER / SIMULATION" else "REAL / ECHTES GELD",
-                    color = if (s.paperMode) Green else Red, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { s.paperMode = true }, modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (s.paperMode) Violet else Panel2)) {
-                        Text("Paper", color = if (s.paperMode) Background else White)
+                Text(if (s.paperMode) "SIMULATION AKTIV" else "ECHTGELD-ANSICHT",
+                    color = if (s.paperMode) Green else Violet, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Simulationsmodus", color = White, fontWeight = FontWeight.Bold)
+                        Text("Nur hier aktivierbar · fiktives Guthaben", color = Muted, fontSize = 11.sp)
                     }
-                    Button(onClick = { s.paperMode = false }, modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (!s.paperMode) Red else Panel2)) {
-                        Text("Real-Modus", color = if (!s.paperMode) Background else White)
-                    }
+                    Switch(checked = s.paperMode, onCheckedChange = { s.setSimulationMode(it) })
                 }
-                Text("Der Real-Modus aktiviert keinen Handel allein. Jeder manuelle Swap braucht weiterhin eine Quote und Bestätigung. Der Server muss Echtgeldhandel erlauben.", color = Muted, fontSize = 11.sp)
-                OutlinedTextField(s.tradeUsd, onValueChange = { s.tradeUsd = it }, label = { Text("Paper-Einsatz USD (max. 1 % Equity)") },
-                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(s.tradeSol, onValueChange = { s.tradeSol = it }, label = { Text("REAL-Einsatz SOL (Serverlimit gilt)") },
-                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-                OutlinedButton(onClick = { s.resetPaper() }) { Text("Paper-Konto zurücksetzen") }
+                Text("Im normalen Modus werden echte Marktdaten und verbundene Wallet-Bestände angezeigt. Ohne eigenen sicheren Trading-Server und explizite Freigabe sind Käufe technisch gesperrt.",
+                    color = Muted, fontSize = 11.sp)
+                if (s.paperMode) {
+                    OutlinedTextField(s.tradeUsd, onValueChange = { s.tradeUsd = it },
+                        label = { Text("Simulierter Einsatz USD (max. 1 % Equity)") },
+                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth())
+                    OutlinedButton(onClick = { s.resetPaper() }) { Text("Simulationskonto zurücksetzen") }
+                } else {
+                    OutlinedTextField(s.tradeSol, onValueChange = { s.tradeSol = it },
+                        label = { Text("Echter Einsatz in SOL (Serverlimit gilt)") },
+                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth())
+                }
             }
         }
         SectionHeader("Backend verbinden", "HTTPS / AUTH")
@@ -436,7 +477,7 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (s.serverStatus?.optBoolean("autoActive") == true) "● AUTO-LIVE IST AKTIV" else "○ AUTO-LIVE IST AUS",
                     color = if (s.serverStatus?.optBoolean("autoActive") == true) Red else Green, fontWeight = FontWeight.Bold)
-                Text("Nur freigegebene Token. Grok schlägt Trades vor; feste Regeln entscheiden über Zulassung. Automatik läuft nur auf einem gesondert gestarteten Server und endet nach 30 Minuten.", color = Muted, fontSize = 12.sp)
+                Text("Nur freigegebene Tokens. Die MemePulse-Engine trifft regelbasierte Entscheidungen; der Server erzwingt zusätzliche Sicherheitsgrenzen. Automatik endet nach 30 Minuten. Danach sind keine Exits mehr aktiv.", color = Muted, fontSize = 12.sp)
                 Button(onClick = onAutoConfirm, enabled = s.serverStatus?.optBoolean("autoAllowed") == true && !s.requesting,
                     colors = ButtonDefaults.buttonColors(containerColor = Red), modifier = Modifier.fillMaxWidth()) {
                     Text("KI-Live-Modus 30 Min. aktivieren", color = Background)
@@ -447,7 +488,7 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
                 Caption("Zusätzlicher Not-Aus: STOP-Datei auf dem Server anlegen.", color = Muted)
             }
         }
-        Hint("Meme-Coins sind hochspekulativ. Keine KI kann einen Gewinn garantieren. Die Marktmetrik ist kein unabhängiges Sicherheits-Audit.")
+        Hint("Meme-Coins sind hochspekulativ. Keine Strategie garantiert Gewinne. Die Engine ist regelbasiert, nicht auf realen Handelsdaten trainiert. Die Marktmetrik ersetzt keinen Security-Audit.")
     }
 }
 @Composable

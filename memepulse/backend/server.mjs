@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { Keypair, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { confirmedPositions, exitSignal, safetyStatus, shouldHaltForUnknown } from './botPolicy.mjs';
+import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
 const env = process.env;
@@ -15,8 +16,7 @@ const LIVE = env.ENABLE_LIVE_TRADES === 'YES_I_ACCEPT_REAL_LOSSES';
 const AUTO_ALLOWED = env.ALLOW_AUTONOMOUS_LIVE === 'YES_I_ACCEPT_AUTONOMOUS_LOSSES';
 const ALLOWLIST = new Set((env.TRADING_ALLOWLIST || '').split(',').map(x => x.trim()).filter(Boolean));
 const JUPITER_KEY = env.JUPITER_API_KEY || '';
-const GROK_KEY = env.XAI_API_KEY || '';
-const GROK_MODEL = env.XAI_MODEL || 'grok-4.7';
+// No commercial AI API required: local, deterministic, auditable quant engine.
 const RPC = env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const DATA_FILE = env.TRADE_LOG_PATH || './private/trades.json';
 const STOP_FILE = env.STOP_FILE || './STOP';
@@ -108,7 +108,12 @@ function normalizePair(pair, mint) {
     symbol: String(pair.baseToken.symbol || '').slice(0, 20),
     priceUsd: Number(pair.priceUsd || 0), liquidityUsd: Number(pair.liquidity?.usd || 0),
     volume24h: Number(pair.volume?.h24 || 0),
-    change1h: Number(pair.priceChange?.h1 || 0),
+    volume1h: Number(pair.volume?.h1 || 0),
+    change5m: Number(pair.priceChange?.m5 ?? NaN),
+    change1h: Number(pair.priceChange?.h1 ?? NaN),
+    change6h: Number(pair.priceChange?.h6 ?? NaN),
+    change24h: Number(pair.priceChange?.h24 ?? NaN),
+    fdvUsd: Number(pair.fdv || 0),
     ageMinutes: Math.max(0, (Date.now() - Number(pair.pairCreatedAt || Date.now())) / 60000),
     buys1h: Number(pair.txns?.h1?.buys || 0), sells1h: Number(pair.txns?.h1?.sells || 0),
     dex: pair.dexId || '', pair: pair.pairAddress || '', marketUrl: pair.url || ''
@@ -168,7 +173,7 @@ async function prepareOrder(body, source = 'MANUAL') {
     const pct = Number(body.percent);
     if (!Number.isFinite(pct) || pct < 1 || pct > 100) throw Error('Verkaufsanteil muss zwischen 1 und 100 liegen');
     const holdings = await tokenBalance(mint);
-    const available = source === 'GROK_EXIT' ?
+    const available = source === 'BOT_EXIT' ?
       BigInt(confirmedPositions(journal).positions.find(p => p.mint === mint && p.autoOwned)?.tokenAtomic || '0') : holdings;
     amount = (holdings < available ? holdings : available) * BigInt(Math.floor(pct * 100)) / 10000n;
   }
@@ -281,39 +286,23 @@ async function executeOrder(id, source) {
   }
   } finally { busy = false; }
 }
-function signalText(data, safe) {
-  return 'Analysiere ausschließlich diese Daten für einen SOLANA Meme Coin. Ohne Belege HOLD. ' +
-    'Keine erfundenen Fakten, kein Versprechen auf Rendite. Antworte ausschließlich als JSON ' +
-    '{"action":"BUY"|"HOLD","mint":"...","confidence":0.0,"reason":"..."}. ' +
-    'Mint=' + data.mint + '; Signal-Kennzahlen=' + JSON.stringify(data) +
-    '; RugCheck=' + JSON.stringify(safe);
-}
-async function grokSignal(data, safety) {
-  if (!GROK_KEY) return { action: 'HOLD', mint: data.mint, confidence: 0, reason: 'XAI_API_KEY fehlt' };
-  const response = await jsonFetch('https://api.x.ai/v1/responses', {
-    method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + GROK_KEY },
-    body: JSON.stringify({
-      model: GROK_MODEL,
-      input: signalText(data, safety),
-      max_output_tokens: 250
-    })
-  });
-  const message = String(response.output_text ||
-    (response.output || []).flatMap(x => x.content || []).filter(x => x.type === 'output_text').map(x => x.text).join('') || '');
-  const matched = message.match(/\{[\s\S]*\}/);
-  if (!matched) throw Error('Keine gültige Grok-Antwort');
-  const signal = JSON.parse(matched[0]);
-  return { action: signal.action === 'BUY' ? 'BUY' : 'HOLD', mint: String(signal.mint || ''),
-    confidence: Number(signal.confidence || 0), reason: String(signal.reason || '').slice(0, 500) };
-}
+// Local decision engine: never needs xAI, Grok, OpenAI or any external model key.
 async function scanAndExplain(mint) {
   const market = await marketFor(mint);
-  const marketReasons = marketRejectReasons(market);
-  if (marketReasons.length) return { mint, action: 'HOLD', reason: marketReasons.join('; '), market };
-  const safety = await rugReport(mint);
-  if (!safety.approved) return { mint, action: 'HOLD', reason: safety.reasons.join('; '), market, safety };
-  const signal = await grokSignal(market, safety);
-  return { ...signal, eligible: validateSignal(signal, mint), market, safety };
+  const signal = analyzeMarket(market || { mint });
+  const marketReasons = marketRejectReasons(market, 75);
+  if (marketReasons.length || !signal.eligible) {
+    return { ...combineWithSecurity(signal, marketReasons), market, safety: null };
+  }
+  try {
+    const safety = await rugReport(mint);
+    const result = combineWithSecurity(signal, safety.reasons);
+    return { ...result, market, safety };
+  } catch (err) {
+    // Fail closed: no trading on API errors/unknown token permissions.
+    return { ...combineWithSecurity(signal, ['TOKEN_SECURITY_UNAVAILABLE']), market,
+      safety: null, error: String(err.message).slice(0, 140) };
+  }
 }
 async function agentCycle() {
   if (!AUTO_ALLOWED || !LIVE || !activeUntil || Date.now() >= activeUntil) {
@@ -339,8 +328,8 @@ async function agentCycle() {
       if (!exit) continue;
       lastExitAttempt.set(p.mint, Date.now());
       agentEvent('EXIT_TRIGGER', p.mint.slice(0, 12) + ': ' + exit.reason + ' ' + exit.changePct.toFixed(1) + '%');
-      const order = await prepareOrder({ side: 'SELL', mint: p.mint, percent: 100 }, 'GROK_EXIT');
-      await executeOrder(order.previewId, 'GROK_EXIT');
+      const order = await prepareOrder({ side: 'SELL', mint: p.mint, percent: 100 }, 'BOT_EXIT');
+      await executeOrder(order.previewId, 'BOT_EXIT');
       return;
     } catch (err) {
       lastAgentError = String(err.message).slice(0, 220);
@@ -361,9 +350,9 @@ async function agentCycle() {
         confidence: result.confidence || 0, reason: result.reason, eligible: !!result.eligible };
       agentEvent(result.eligible ? 'BUY_SIGNAL' : 'HOLD_SIGNAL', mint.slice(0, 12) + ' · ' + (result.reason || 'Kein Signal'));
       if (!result.eligible) continue;
-      const preview = await prepareOrder({ side: 'BUY', mint, amountSol: Number(MAX_TRADE) / 1e9 }, 'GROK');
+      const preview = await prepareOrder({ side: 'BUY', mint, amountSol: Number(MAX_TRADE) / 1e9 }, 'ENGINE');
       if (Date.now() >= activeUntil || fs.existsSync(STOP_FILE)) return;
-      await executeOrder(preview.previewId, 'GROK');
+      await executeOrder(preview.previewId, 'ENGINE');
       return; // Only one transaction per cycle.
     } catch (err) {
       lastAgentError = String(err.message).slice(0, 220);
@@ -380,7 +369,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'GET' && url.pathname === '/api/status') return reply(res, 200, {
       live: LIVE, autoAllowed: AUTO_ALLOWED, autoActive: activeUntil > Date.now(), autoExpiresAt: activeUntil || null,
-      grokConnected: !!GROK_KEY, wallet: address, whitelistedMints: [...ALLOWLIST],
+      engineConnected: true, strategyName: 'MemePulse Quant v1', engineVersion: 'memepulse-quant-v1', wallet: address, whitelistedMints: [...ALLOWLIST],
       maxTradeSol: Number(MAX_TRADE) / 1e9, maxDailySpendSol: Number(MAX_DAILY) / 1e9,
       maxOrdersPerDay: MAX_ORDERS, maxOpenPositions: MAX_OPEN_POSITIONS,
       stopLossPct: STOP_LOSS_PCT, takeProfitPct: TAKE_PROFIT_PCT,
@@ -430,7 +419,7 @@ const server = http.createServer(async (req, res) => {
       return reply(res, 200, await executeOrder(String(body.previewId || ''), 'MANUAL'));
     }
     if (url.pathname === '/api/agent/start') {
-      if (!AUTO_ALLOWED || !LIVE || !GROK_KEY || !ALLOWLIST.size) throw Error('Autonomes Trading nicht vollständig freigeschaltet');
+      if (!AUTO_ALLOWED || !LIVE || !ALLOWLIST.size) throw Error('Autonomes Trading nicht vollständig freigeschaltet');
       const safety = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
       if (safety.halted) throw Error('Bot wegen Risikostopp blockiert: ' + safety.reasons.join('; '));
       if (fs.existsSync(STOP_FILE)) throw Error('STOP-Datei blockiert den Bot');

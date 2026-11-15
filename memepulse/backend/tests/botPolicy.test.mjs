@@ -4,10 +4,10 @@ import { confirmedPositions, exitSignal, safetyStatus, shouldHaltForUnknown } fr
 
 const now = Date.now();
 const buy = { at: now - 3000, status: 'SUCCESS', side: 'BUY',
-  mint: 'token1', source: 'GROK', amountLamports: '10000000',
+  mint: 'token1', source: 'ENGINE', amountLamports: '10000000',
   actualInputAtomic: '10000000', actualOutputAtomic: '1000', entryPriceUsd: .02 };
 const sell = { at: now - 1000, status: 'SUCCESS', side: 'SELL',
-  mint: 'token1', source: 'GROK_EXIT', amountLamports: '500',
+  mint: 'token1', source: 'BOT_EXIT', amountLamports: '500',
   actualInputAtomic: '500', actualOutputAtomic: '7000000' };
 
 test('open positions are reconciled from confirmed fills, not paper gains', () => {
