@@ -5,6 +5,7 @@ import { Keypair, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { confirmedPositions, exitSignal, safetyStatus, shouldHaltForUnknown } from './botPolicy.mjs';
 import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
+import { researchStatus } from './research/status.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -21,6 +22,7 @@ const JUPITER_KEY = env.JUPITER_API_KEY || '';
 const RPC = env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const DATA_FILE = env.TRADE_LOG_PATH || './private/trades.json';
 const STOP_FILE = env.STOP_FILE || './STOP';
+const RESEARCH_REPORT_PATH = env.RESEARCH_REPORT_PATH || '';
 const MAX_TRADE = BigInt(Math.round(Number(env.MAX_TRADE_SOL || '0.01') * 1e9));
 const MAX_DAILY = BigInt(Math.round(Number(env.MAX_DAILY_SPEND_SOL || '0.05') * 1e9));
 const RESERVE = BigInt(Math.round(Number(env.MIN_SOL_RESERVE || '0.02') * 1e9));
@@ -443,6 +445,9 @@ const server = http.createServer(async (req, res) => {
       risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL), stopped: fs.existsSync(STOP_FILE),
       warning: 'Kein garantierter Profit. Sicherheitsprüfung ersetzt kein Audit.'
     });
+    if (req.method === 'GET' && url.pathname === '/api/research/status') {
+      return reply(res, 200, researchStatus(RESEARCH_REPORT_PATH));
+    }
     if (req.method === 'GET' && url.pathname === '/api/market') return reply(res, 200, {
       tokens: await marketFeed(), promotedFeed: true, source: 'DEX Screener', timestamp: Date.now()
     });
