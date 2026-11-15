@@ -276,6 +276,10 @@ private fun Radar(s: MemeStore) {
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
             label = { Text("Coin oder Mint-Adresse suchen") }, singleLine = true)
+        if (query.trim().length in 32..44) {
+            OutlinedButton(onClick = { s.lookupMint(query.trim()) }, enabled = !s.marketLoading,
+                modifier = Modifier.fillMaxWidth()) { Text("⌕ Solana Mint-Adresse online prüfen", color = Violet) }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = minScore, onCheckedChange = { minScore = it })
             Text("Nur Markt-Score ≥ 75", color = White, fontSize = 12.sp)
