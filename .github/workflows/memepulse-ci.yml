@@ -62,9 +62,9 @@ jobs:
         working-directory: memepulse/android
         run: gradle --no-daemon :app:assembleDebug
       - name: Prepare APK
-        run: cp memepulse/android/app/build/outputs/apk/debug/app-debug.apk MemePulseAI-Android-v0.2-debug.apk
+        run: cp memepulse/android/app/build/outputs/apk/debug/app-debug.apk MemePulseAI-Android-v0.3-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MemePulseAI-Android-v0.2-debug-APK
-          path: MemePulseAI-Android-v0.2-debug.apk
+          name: MemePulseAI-Android-v0.3-debug-APK
+          path: MemePulseAI-Android-v0.3-debug.apk
           retention-days: 30
