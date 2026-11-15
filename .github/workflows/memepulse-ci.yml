@@ -27,6 +27,21 @@ jobs:
       - name: Run backend regression tests
         working-directory: memepulse/backend
         run: npm test
+      - name: Smoke-test API startup in PAPER-only mode
+        working-directory: memepulse/backend
+        env:
+          API_BEARER_TOKEN: "CI_TEST_ONLY_NOT_FOR_LIVE_TRADING_1234567890"
+        run: |
+          node server.mjs > /tmp/memepulse-api.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS "http://127.0.0.1:8787/health" > /tmp/memepulse-health.json; then break; fi
+            sleep 1
+          done
+          cat /tmp/memepulse-health.json
+          grep -q '"realTradesEnabled":false' /tmp/memepulse-health.json
+          curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8787/api/status" | grep -q 401
   android-debug:
     runs-on: ubuntu-latest
     steps:
