@@ -25,7 +25,11 @@ data class Coin(
     val ageMin: Double,
     val buys: Double,
     val sells: Double,
-    val live: Boolean
+    val live: Boolean,
+    val change5m: Double = Double.NaN,
+    val change6h: Double = Double.NaN,
+    val volume1h: Double = Double.NaN,
+    val fdvUsd: Double = 0.0
 ) {
     val score: Int get() {
         if (price <= 0) return 0
@@ -59,7 +63,7 @@ class MemeStore(context: Context) {
     var marketLoading by mutableStateOf(false)
     var realMarket by mutableStateOf(false)
     var marketTimestamp by mutableLongStateOf(0L)
-    var paperMode by mutableStateOf(true)
+    var paperMode by mutableStateOf(prefs.getBoolean("simulationEnabled", false))
     var backendUrl by mutableStateOf(prefs.getString("backendUrl", "") ?: "")
     var backendToken by mutableStateOf("") // NEVER persisted. Never holds a wallet private key.
     var serverStatus by mutableStateOf<JSONObject?>(null)
@@ -84,7 +88,7 @@ class MemeStore(context: Context) {
 
     init {
         restore()
-        if (coins.isEmpty()) seedDemo()
+        if (paperMode) seedDemo() else refreshMarket()
     }
     private fun seedDemo() {
         coins.clear()
@@ -120,7 +124,7 @@ class MemeStore(context: Context) {
             message = "Maximal 3 Positionen oder Coin bereits gehalten."
             return
         }
-        if (!realMarket && c.live) { message = "Kursquelle unklar"; return }
+        if (!paperMode || !realMarket || !c.live) { message = "Paper-Kauf nur im aktivierten Simulationsmodus mit Live-Kursen"; return }
         val quantity = spend * .992 / c.price // 0.8 % simulated total entry cost
         cash -= spend
         positions.add(PaperPosition(c.mint, c.symbol, quantity, spend, c.price))
@@ -186,7 +190,11 @@ class MemeStore(context: Context) {
                         liq, pair.optJSONObject("volume")?.optDouble("h24", 0.0) ?: 0.0,
                         max(0.0, (System.currentTimeMillis() - created) / 60000.0),
                         trade?.optDouble("buys", 0.0) ?: 0.0,
-                        trade?.optDouble("sells", 0.0) ?: 0.0, true)
+                        trade?.optDouble("sells", 0.0) ?: 0.0, true,
+                        pair.optJSONObject("priceChange")?.optDouble("m5", Double.NaN) ?: Double.NaN,
+                        pair.optJSONObject("priceChange")?.optDouble("h6", Double.NaN) ?: Double.NaN,
+                        pair.optJSONObject("volume")?.optDouble("h1", Double.NaN) ?: Double.NaN,
+                        pair.optDouble("fdv", 0.0))
                     if (token.price > 0 && (best[mint]?.liquidity ?: -1.0) < liq) best[mint] = token
                 }
                 if (best.isEmpty()) error("Keine handelbaren Kurse im Feed")
@@ -198,7 +206,7 @@ class MemeStore(context: Context) {
                     marketLoading = false
                     recordEquity()
                     message = "Live-Kurse aktualisiert · ausschließlich Marktdaten"
-                    if (paperBotEnabled) runPaperBotCycle()
+                    if (paperBotEnabled && paperMode) runPaperBotCycle()
                 }
             } catch (e: Exception) {
                 main.post {
@@ -217,7 +225,15 @@ class MemeStore(context: Context) {
         }
         recordEquity()
     }
-    fun useDemo() { paperBotEnabled = false; seedDemo(); message = "DEMO · frei erfundene Token und Kurse" }
+    fun setSimulationMode(enabled: Boolean) {
+        if (paperMode == enabled) return
+        paperMode = enabled
+        paperBotEnabled = false
+        prefs.edit().putBoolean("simulationEnabled", enabled).apply()
+        message = if (enabled) "Simulation aktiviert – reale Kurse, fiktives Guthaben"
+            else "Echtgeld-Oberfläche aktiv – Orders ohne Serverfreigabe gesperrt"
+        if (!realMarket) refreshMarket()
+    }
     private fun save() {
         val p = JSONArray()
         positions.forEach {
@@ -317,13 +333,23 @@ class MemeStore(context: Context) {
         }
     }
     fun analyze(c: Coin) {
-        if (!c.live || !realMarket) { message = "Nur echte Mint-Adressen analysieren"; return }
+        if (!c.live || !realMarket) { message = "Für eine Analyse sind echte Marktdaten erforderlich"; return }
         selectedCoin = c
         async {
-            val result = backend("/api/ai/signal", JSONObject().put("mint", c.mint))
+            val signal = NativeStrategy.analyze(c)
+            val safety = if (signal.eligible) {
+                try {
+                    NativeStrategy.securityReasons(JSONObject(getJson("https://api.rugcheck.xyz/v1/tokens/" +
+                        java.net.URLEncoder.encode(c.mint, "UTF-8") + "/report")))
+                } catch (err: Exception) { listOf("Tokenprüfung nicht erreichbar") }
+            } else emptyList()
+            val result = signal.toJson(c.mint)
+            if (safety.isNotEmpty()) result.put("action", "HOLD").put("eligible", false)
+                .put("reason", "Tokenprüfung: " + safety.joinToString(", "))
             main.post {
                 aiSignal = result
-                message = "KI-Signal: " + result.optString("action", "HOLD")
+                message = "MemePulse Engine: " + result.optString("action", "HOLD") +
+                    " · Signalstärke " + signal.score + "/100"
             }
         }
     }
@@ -376,12 +402,13 @@ class MemeStore(context: Context) {
             message = "Paper-Automatik ausgeschaltet"
             return
         }
+        if (!paperMode) { message = "Simulation zuerst in den Einstellungen aktivieren"; return }
         if (!realMarket || System.currentTimeMillis() - marketTimestamp > 120000) {
             message = "Zuerst frische Live-Marktdaten im Radar abrufen"
             return
         }
-        if (serverStatus?.optBoolean("grokConnected") != true || backendToken.length < 32) {
-            message = "KI-Paper-Bot benötigt einen verbundenen Grok-Backend-Server"
+        if (!paperMode) {
+            message = "Simulation zuerst unter Einstellungen aktivieren"
             return
         }
         paperBotEnabled = true
@@ -389,10 +416,9 @@ class MemeStore(context: Context) {
         paperLog("KI-Paper-Bot aktiviert · nur Simulation · max. 1 % pro Kauf")
         runPaperBotCycle()
     }
-    // The agent buys only when xAI AND server-side RugCheck + fixed gates agree.
-    // No Grok connection => NO automated buys, not fabricated AI decisions.
+    // Native quant signal + independent RugCheck approval; no external AI model or key.
     fun runPaperBotCycle() {
-        if (!paperBotEnabled || paperBotWorking || !realMarket) return
+        if (!paperMode || !paperBotEnabled || paperBotWorking || !realMarket) return
         if (System.currentTimeMillis() - marketTimestamp > 120000) {
             paperLog("Kurse veraltet · keine Orders")
             return
@@ -422,38 +448,36 @@ class MemeStore(context: Context) {
         }
         val recentlyBought = fills.filter { it.side == "BUY" && it.at >= System.currentTimeMillis() - 86400000 }
             .map { it.symbol }.toSet()
-        val candidates = coins.filter { it.live && it.score >= 85 &&
+        val candidates = coins.filter { it.live && NativeStrategy.analyze(it).eligible &&
             it.symbol !in recentlyBought && positions.none { p -> p.mint == it.mint } }
-            .sortedByDescending { it.score }.take(4)
-        if (candidates.isEmpty()) { paperLog("HOLD · keine Coins über der Sicherheitsschwelle"); return }
+            .sortedByDescending { NativeStrategy.analyze(it).score }.take(4)
+        if (candidates.isEmpty()) { paperLog("HOLD · keine positiven Quant-Signale"); return }
         paperBotWorking = true
         thread {
             try {
                 var found = false
                 for (coin in candidates) {
-                    if (!paperBotEnabled) break
-                    val result = try {
-                        backend("/api/ai/signal", JSONObject().put("mint", coin.mint))
-                    } catch (e: Exception) {
-                        main.post { paperLog("Scanfehler: " + (e.message ?: "Server").take(90)) }
-                        continue
-                    }
-                    val approved = result.optBoolean("eligible", false) &&
-                        result.optString("action") == "BUY" &&
-                        result.optString("mint") == coin.mint
+                    if (!paperBotEnabled || !paperMode) break
+                    val signal = NativeStrategy.analyze(coin)
+                    val safety = try {
+                        NativeStrategy.securityReasons(JSONObject(getJson(
+                            "https://api.rugcheck.xyz/v1/tokens/" +
+                                java.net.URLEncoder.encode(coin.mint, "UTF-8") + "/report")))
+                    } catch (err: Exception) { listOf("RugCheck nicht erreichbar") }
+                    val approved = signal.eligible && safety.isEmpty()
                     main.post {
-                        paperLog(coin.symbol + ": " + result.optString("action", "HOLD") +
-                            " · " + result.optString("reason", "ohne Begründung").take(75))
-                        if (approved && paperBotEnabled &&
+                        paperLog(coin.symbol + " · Signal " + signal.score + "/100 · " +
+                            if (approved) "RugCheck OK" else "HOLD: " + safety.joinToString(", "))
+                        if (approved && paperBotEnabled && paperMode &&
                             System.currentTimeMillis() - marketTimestamp < 120000 &&
                             positions.none { it.mint == coin.mint }) {
                             paperBuyAmount(coin, min(9.0, equity() * .009))
-                            paperLog("Grok + Filter haben Paper BUY " + coin.symbol + " zugelassen")
+                            paperLog("Quant-Engine: PAPER BUY " + coin.symbol + " simuliert")
                         }
                     }
                     if (approved) { found = true; break }
                 }
-                if (!found) main.post { paperLog("Scan beendet · kein genehmigtes Kaufsignal") }
+                if (!found) main.post { paperLog("Scan beendet · Sicherheitsfilter verhindert Kauf") }
             } finally { main.post { paperBotWorking = false } }
         }
     }
