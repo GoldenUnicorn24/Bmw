@@ -472,6 +472,101 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
             }
         }
+        SectionHeader("Sicherheitscheck", "ECHTGELD-FREIGABE")
+        Surface(color = Panel, shape = RoundedCornerShape(17.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val result = s.readiness
+                Text(if (result?.optBoolean("productionReady") == true)
+                    "● PRODUKTIONSSTATUS GEPRÜFT" else "● ENTWICKLER-BETA: NICHT ECHTGELD-BEREIT",
+                    color = if (result?.optBoolean("productionReady") == true) Green else Red,
+                    fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Bitte keine echten SOL einzahlen, solange echte Tests, ein unabhängiger Audit oder eine bestätigte sichere Rücküberweisung fehlen.",
+                    color = Muted, fontSize = 12.sp)
+                OutlinedButton(onClick = { s.refreshReadiness() },
+                    enabled = !s.requesting && s.backendToken.length >= 32,
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("↻ Alle Server-Sicherheitsprüfungen laden")
+                }
+                val checks = result?.optJSONArray("checks")
+                if (checks != null) {
+                    Caption("${result.optInt("checksPassed")}/${result.optInt("checkCount")} Prüfungen bestanden",
+                        color = Muted)
+                    for (i in 0 until checks.length()) {
+                        val row = checks.optJSONObject(i) ?: continue
+                        Text((if (row.optBoolean("passed")) "✓  " else "✕  ") +
+                            row.optString("label"),
+                            color = if (row.optBoolean("passed")) Green else Red,
+                            fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        SectionHeader("SOL-Auszahlung", "MANUELL · STANDARD: AUS")
+        Surface(color = Panel, shape = RoundedCornerShape(17.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                Text("Geld nur an eine auf dem eigenen Server vorab erlaubte Wallet zurücküberweisen. Die App darf die Zieladresse nicht verändern.",
+                    color = Muted, fontSize = 12.sp)
+                OutlinedButton(onClick = { s.refreshWithdrawalStatus() },
+                    enabled = s.backendToken.length >= 32,
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("Auszahlungsberechtigung prüfen")
+                }
+                val status = s.withdrawalStatus
+                Text(if (status?.optBoolean("enabled") == true) "● MANUELLE AUSZAHLUNG AM SERVER FREIGEGEBEN"
+                    else "○ AUSZAHLUNG NICHT EINGERICHTET",
+                    color = if (status?.optBoolean("enabled") == true) Green else Muted,
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (status?.optBoolean("enabled") == true) {
+                    Caption("Zieladresse: " + status.optString("destination", "Keine Adresse"),
+                        color = Muted)
+                    Caption("Serverlimit je Überweisung: " +
+                        status.optDouble("maxWithdrawalSol", 0.0) + " SOL", color = Muted)
+                    OutlinedTextField(s.withdrawalAmount,
+                        onValueChange = { s.withdrawalAmount = it },
+                        label = { Text("Rücküberweisung in SOL") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(s.withdrawalFactor,
+                        onValueChange = { s.withdrawalFactor = it },
+                        label = { Text("Separater Auszahlungs-Freigabecode") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Button(onClick = { s.prepareWithdrawal() },
+                        enabled = !s.requesting && !s.paperMode && s.withdrawalFactor.length >= 32 &&
+                            status.optBoolean("signerReady") && !status.optBoolean("pendingReconciliation"),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Violet)) {
+                        Text("Verbindliche Auszahlungsvorschau prüfen", color = Background)
+                    }
+                }
+                Text("Nur native SOL, keine Banküberweisung. Erst nach unabhängigen Mainnet-Tests verwenden. Eine Auszahlungsfreigabe ist keine Garantie gegen technische Fehler.",
+                    color = Muted, fontSize = 11.sp)
+            }
+        }
+        s.withdrawalPreview?.let { preview ->
+            AlertDialog(
+                onDismissRequest = { s.cancelWithdrawal() },
+                title = { Text("ECHTE SOL-RÜCKÜBERWEISUNG") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Dies ist keine Simulation. Die Überweisung kann auf der Blockchain nicht rückgängig gemacht werden.")
+                        Text("Betrag: " + preview.optDouble("amountSol") + " SOL",
+                            fontWeight = FontWeight.Bold)
+                        Text("Ziel: " + preview.optString("destination"),
+                            fontSize = 12.sp)
+                        Text("Ausschließlich bestätigen, wenn die Zieladresse unabhängig geprüft wurde und du die Überweisung ausdrücklich möchtest.")
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { s.executeWithdrawal() },
+                        enabled = !s.requesting) { Text("ECHTE SOL ÜBERWEISEN", color = Red) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { s.cancelWithdrawal() }) { Text("ABBRECHEN") }
+                }
+            )
+        }
         SectionHeader("KI-Trade-Automation", "STANDARD: AUS")
         Surface(color = Panel, shape = RoundedCornerShape(17.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -488,7 +583,7 @@ private fun Settings(s: MemeStore, onAutoConfirm: () -> Unit) {
                 Caption("Zusätzlicher Not-Aus: STOP-Datei auf dem Server anlegen.", color = Muted)
             }
         }
-        Hint("Meme-Coins sind hochspekulativ. Keine Strategie garantiert Gewinne. Die Engine ist regelbasiert, nicht auf realen Handelsdaten trainiert. Die Marktmetrik ersetzt keinen Security-Audit.")
+        Hint("Meme-Coins sind hochspekulativ. Keine Strategie garantiert Gewinne. Die Live-Engine ist regelbasiert; das separat trainierte Forschungsmodell darf keine echten Orders autorisieren. Die Marktmetrik ersetzt keinen Security-Audit.")
     }
 }
 @Composable
