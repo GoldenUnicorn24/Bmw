@@ -110,7 +110,7 @@ private fun MemePulse(s: MemeStore) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Mint: " + review.optString("mint"), color = White, fontSize = 11.sp)
                         val safety = review.optJSONObject("safety")
-                        Text("RugCheck: " + (safety?.optInt("score")?.toString() ?: "nicht verfügbar"), color = Muted)
+                        Text("RugCheck-Risiko (0 = gering): " + (safety?.optInt("score")?.toString() ?: "nicht verfügbar") + "/100", color = Muted)
                         Text("Liquidität: " + usd(review.optJSONObject("market")?.optDouble("liquidityUsd", 0.0) ?: 0.0), color = Muted)
                         Text("Markt-Score: " + (review.optJSONObject("market")?.optInt("score") ?: "siehe Radar"), color = Muted)
                         Text(if (review.optBoolean("approved")) "Die technischen Mindestprüfungen sind erfüllt. Dies ist keine Garantie gegen Rug Pulls." else
