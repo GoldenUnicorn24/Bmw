@@ -30,7 +30,7 @@ export function marketRejectReasons(t, minScore = 75) {
 // Never use score_normalised for live authorization; its direction is inconsistently documented.
 // Fail closed on unavailable reports or unknown authorities.
 export function rugRejectReasons(report) {
-  if (!report || !Number.isFinite(Number(report.score)) || Number(report.score) < 0)
+  if (!report || report.score == null || !Number.isFinite(Number(report.score)) || Number(report.score) < 0)
     return ['RugCheck-Rohwert nicht verfügbar'];
   const reasons = [];
   const raw = Number(report.score);
