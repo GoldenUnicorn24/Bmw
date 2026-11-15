@@ -26,7 +26,7 @@ export function confirmedPositions(journal) {
       const proratedCost = prev.costSol * sold / prev.tokens;
       prev.tokens -= sold;
       prev.costSol -= proratedCost;
-      realized.push({ mint, at: Number(trade.at), pnlSolAtomic: output - proratedCost,
+      realized.push({ mint, source: String(trade.source || ''), at: Number(trade.at), pnlSolAtomic: output - proratedCost,
         soldTokensAtomic: sold, realizedOutputSolAtomic: output });
       if (prev.tokens === 0n) { prev.entryPriceUsd = 0; prev.sources.clear(); }
     }
