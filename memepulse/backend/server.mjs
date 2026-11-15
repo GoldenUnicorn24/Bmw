@@ -46,6 +46,7 @@ let activeUntil = 0;
 let exitOnlyUntil = 0;
 let sessionExpiredLogged = false;
 let lastAutoCycle = 0;
+let agentCycleRunning = false;
 let lastAgentObservation = null;
 let lastAgentError = null;
 let agentEvents = [];
@@ -325,7 +326,7 @@ function currentPerformance() {
 }
 async function agentCycle() {
   const now = Date.now();
-  const entriesAllowed = AUTO_ALLOWED && LIVE && activeUntil > now;
+  let entriesAllowed = AUTO_ALLOWED && LIVE && activeUntil > now;
   const exitsAllowed = AUTO_ALLOWED && LIVE && exitOnlyUntil > now;
   if (!entriesAllowed && !exitsAllowed) return;
   if (!entriesAllowed && !sessionExpiredLogged) {
@@ -337,10 +338,22 @@ async function agentCycle() {
     agentEvent('STOPPED', 'STOP-Datei erkannt');
     return;
   }
-  if (busy || Date.now() - lastAutoCycle < 60000) return;
+  if (busy || agentCycleRunning || Date.now() - lastAutoCycle < 60000) return;
+  agentCycleRunning = true;
   lastAutoCycle = Date.now();
+  try {
   const halt = safetyStatus(journal, MAX_REALIZED_LOSS_SOL);
-  if (halt.halted) { activeUntil = 0; agentEvent('RISK_HALT', halt.reasons.join('; ')); return; }
+  if (halt.halted) {
+    activeUntil = 0;
+    entriesAllowed = false;
+    agentEvent('RISK_HALT', halt.reasons.join('; '));
+    // Unknown/unfinished chain transactions cannot be safely reconciled: stop all signing.
+    if (shouldHaltForUnknown(journal) || halt.reasons.some(x=>x.includes('Ausführungsbeträge'))) {
+      exitOnlyUntil = 0;
+      return;
+    }
+    // Daily loss limit pauses NEW entries, but pre-existing positions can still be exited.
+  }
 
   // Exit checks are deterministic, independent of positive engine signals.
   const holdings = confirmedPositions(journal).positions.filter(p => p.autoOwned);
@@ -407,6 +420,7 @@ async function agentCycle() {
       agentEvent('SCAN_SKIPPED', lastAgentError);
     }
   }
+  } finally { agentCycleRunning = false; }
 }
 
 setInterval(() => { if (activeUntil > Date.now() || exitOnlyUntil > Date.now()) agentCycle().catch(err => console.error('Agent:', err.message)); }, 60000).unref();
