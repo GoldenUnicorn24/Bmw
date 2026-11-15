@@ -9,6 +9,9 @@ services:
       PORT: "8787"
       TRADE_LOG_PATH: "/app/private/trades.json"
       STOP_FILE: "/app/private/STOP"
+      WITHDRAWAL_LOG_PATH: "/app/private/withdrawals.json"
+      MEME_RESEARCH_REPORT_PATH: "/app/private/meme-training-report.json"
+      PENNY_RESEARCH_REPORT_PATH: "/app/private/penny-training-report.json"
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
