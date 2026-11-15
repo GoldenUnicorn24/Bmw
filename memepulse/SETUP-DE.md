@@ -1,12 +1,30 @@
-# MemePulse AI v0.4 – Android installieren und handeln
+# MemePulse AI v0.5 – Autopilot 2 auf Android einrichten
 
-**Keine Grok- oder sonstige KI-Modell-API erforderlich.** Die integrierte Quant Engine 1.0 ist ein von uns programmiertes, transparentes Regelwerk und kein trainiertes neuronales Modell. Es garantiert keine Gewinne. Die App enthält keine vorkonfigurierte Wallet und keinen laufenden Server.
+## Neu in v0.5: Autopilot 2 und eigene Einzahlungsadresse
+
+- **Keine KI-Abonnements:** Eine selbst programmierte Regel-Engine analysiert gleichzeitig mehrere Zeiträume, Liquiditätsbewegungen und Kaufdruck; dies ist **kein trainiertes neuronales Netz** und **keine bewiesene Gewinnstrategie**.
+- **Dreifache Marktbestätigung:** Vor Echtgeldkäufen müssen mindestens drei unabhängige Kursmessungen über mindestens zwei Minuten vorliegen. Plötzliche Kurssprünge und Liquiditätsabflüsse stoppen Käufe.
+- **Risikoadaptives Budget:** Pro Kauf maximal 2 % verfügbares Walletkapital (zusätzlich zu den serverseitigen Trade- und Tageslimits). Das modellierte Stop-Risiko liegt bei höchstens 0,5 % des Walletwertes; echte Verluste können erheblich höher sein.
+- **Positionsschutz:** Stop-Loss, Take-Profit, Trailing-Stop und maximale Haltedauer; bis zu zwei Stunden Ausstiegsüberwachung nach Ende der 24-Stunden-Kaufsitzung, sofern der Server läuft.
+- **Performance-Wächter:** Nach 20 abgeschlossenen eigenen Bot-Verkäufen pausiert er neue Käufe bei negativer gemessener Durchschnittsrendite.
+- **Einzahlungen:** Im KI-Bot auf „Eigene Einzahlungsadresse anzeigen“ tippen. Die Adresse wird **nur** angezeigt, wenn auf dem privaten Server bereits eine echte separate Wallet konfiguriert ist. Immer unabhängig vergleichen, ausschließlich native SOL auf Solana-Mainnet senden.
+- **WICHTIG:** Einzahlung **allein** startet noch keine Handelssitzung. Zuerst sind die einmalige Einrichtung des Servers und der Wallet, API-Authentifizierung und die ausdrückliche Freigabe des Autopiloten nötig. Danach kann der Bot innerhalb des genehmigten Zeitfensters ohne weitere einzelne Kaufentscheidungen arbeiten. Er kauft nur Token aus der geprüften Allowlist.
+- **Sicherheitsgrenze:** Nach Neustart oder Ablauf des Überwachungsfensters gibt es keinen laufenden Schutz. Private Schlüssel niemals über Chat oder GitHub weitergeben. Echte Swap-Signaturen und die Gesamtausführung müssen vor produktivem Einsatz extern geprüft werden.
+
+### Konfiguration zusätzlich zu den Beispielen weiter unten
+
+AUTOPILOT_SESSION_HOURS=24
+
+Die beiden Freigaben ENABLE_LIVE_TRADES und ALLOW_AUTONOMOUS_LIVE bleiben ab Werk AUS. Für einen Anfang bitte nur Paper-Trading verwenden.
+
+
+**Keine Grok- oder sonstige KI-Modell-API erforderlich.** Die integrierte Quant Engine mit Autopilot 2 ist ein von uns programmiertes, transparentes Regelwerk und kein trainiertes neuronales Modell. Es garantiert keine Gewinne. Die App enthält keine vorkonfigurierte Wallet und keinen laufenden Server.
 
 ## 1. Android APK installieren
 1. Öffne https://github.com/GoldenUnicorn24/Bmw/actions
 2. Wähle den Workflow **MemePulse AI - Android APK**.
-3. Öffne den neuesten erfolgreichen Lauf vom Branch **feature/memepulse-v04-native-ai**.
-4. Unter **Artifacts** lade **MemePulseAI-Android-v0.4-debug-APK** herunter. ZIP entpacken und die APK installieren.
+3. Öffne den neuesten erfolgreichen Lauf vom Branch **feature/memepulse-v05-autopilot**.
+4. Unter **Artifacts** lade **MemePulseAI-Android-v0.5-debug-APK** herunter. ZIP entpacken und die APK installieren.
 5. Beim ersten Start ist **Simulation AUS**. Du siehst den echten SOLANA-Markt. Ist noch keine Wallet verbunden, steht dort bewusst kein erfundenes Guthaben.
 6. Unter **Radar → Live-Kurse abrufen** aktualisierst du die Daten. Wähle einen Coin und tippe **Signal prüfen**. Die App analysiert direkt auf dem Handy 5m-/1h-/6h-Trends, Kaufdruck, Liquidität, Volumen sowie den verfügbaren RugCheck-Bericht.
 
@@ -16,7 +34,7 @@ Ein positives Signal ist keine Kauf- oder Gewinngarantie. Die angezeigte Signals
 1. **Einstellungen → Simulationsmodus** einschalten. Der Schalter ist beim ersten Start **AUS**.
 2. Jetzt erscheint das fiktive Testkonto mit 1.000 USD Startkapital, Paper-Portfolio und Paper-Historie.
 3. **KI-Bot → Paper-Bot starten**. Keine Wallet, kein xAI-Schlüssel und kein Grok nötig.
-4. Der Bot nutzt aktuelle reale Kursdaten und simuliert Käufe nach internem Quant-Signal und RugCheck (wenn RugCheck nicht verfügbar ist, kauft er nicht). Maximal 1 % simuliertes Guthaben je Kauf, drei Käufe pro Tag, drei gleichzeitig offene Positionen. Kursbasierte Ausstiegsregeln bei −12 % bzw. +25 %.
+4. Der Bot nutzt aktuelle reale Kursdaten und simuliert Käufe nach internem Quant-Signal und RugCheck (wenn RugCheck nicht verfügbar ist, kauft er nicht). Maximal 1 % simuliertes Guthaben je Kauf, drei Käufe pro Tag, drei gleichzeitig offene Positionen. Kursbasierte Ausstiegsregeln bei −12 % bzw. +25 %, zusätzlich nachgezogener Stopp und maximale Haltedauer.
 5. Bei **Einstellungen → Simulationsmodus AUS** stoppt der Paper-Bot, und die App zeigt wieder nur die reale Oberfläche. Die Einstellung bleibt gespeichert.
 
 Die Simulation läuft nur solange die App aktiv ist. Preise, Slippage und Verfügbarkeit echter Swaps sind nicht garantiert.
@@ -70,9 +88,9 @@ Das Feature ist standardmäßig serverseitig AUS. Zur gesonderten Freigabe auf d
 
     ALLOW_AUTONOMOUS_LIVE=YES_I_ACCEPT_AUTONOMOUS_LOSSES
 
-Danach in der App im **KI-Bot** die Echtgeld-Automatik ausdrücklich für **30 Minuten** starten. Die Engine analysiert ausschließlich die festgelegten erlaubten Mint-Adressen, prüft Risikolimits und RugCheck und führt bei positivem Quant-Signal Jupiter-Swaps aus. Kein Grok-Key und kein sonstiger KI-Key nötig.
+Danach in der App im **KI-Bot** die Echtgeld-Automatik ausdrücklich für **bis zu 24 Stunden** starten. Die Engine analysiert ausschließlich die festgelegten erlaubten Mint-Adressen, prüft Risikolimits und RugCheck und führt bei positivem Quant-Signal Jupiter-Swaps aus. Kein Grok-Key und kein sonstiger KI-Key nötig.
 
-**WICHTIGE GRENZE:** Nach Ablauf von 30 Minuten überwacht der Bot offene Echtgeldpositionen **nicht mehr**. Auch während der Sitzung sind Stop-Loss-Regeln nicht garantiert; Blockchain- oder Server-Ausfälle, Slippage, geringe Liquidität und Rug Pulls können Verluste bis 100 % verursachen. Bisher gibt es keinen nachgewiesenen profitablen Backtest, keinen externen Sicherheits-Audit und keine bestätigten echten End-to-End-Trades. Bitte nicht mit nennenswerten Beträgen betreiben.
+**WICHTIGE GRENZE:** Nach Ablauf der 24-Stunden-Sitzung überwacht der Bot offene Echtgeldpositionen **nicht mehr**. Auch während der Sitzung sind Stop-Loss-Regeln nicht garantiert; Blockchain- oder Server-Ausfälle, Slippage, geringe Liquidität und Rug Pulls können Verluste bis 100 % verursachen. Bisher gibt es keinen nachgewiesenen profitablen Backtest, keinen externen Sicherheits-Audit und keine bestätigten echten End-to-End-Trades. Bitte nicht mit nennenswerten Beträgen betreiben.
 
 Not-Aus über **KI-Bot → NOT-AUS**, zusätzlich serverseitig STOP-Datei anlegen (in Docker: /app/private/STOP) oder Server abschalten. Bereits gesendete Swaps sind nicht rückgängig zu machen.
 
@@ -84,4 +102,4 @@ Not-Aus über **KI-Bot → NOT-AUS**, zusätzlich serverseitig STOP-Datei anlege
 - **Auto-Bot gesperrt:** Live-Freigabe, Server-Allowlist, Limits oder Sicherheitsstopp prüfen.
 - **UNKNOWN/SUBMITTED:** Blockchainstatus und Wallet manuell abgleichen, nie blind erneut ausführen.
 
-Quellcode im Feature-Branch: https://github.com/GoldenUnicorn24/Bmw/tree/feature/memepulse-v04-native-ai/memepulse
+Quellcode im Feature-Branch: https://github.com/GoldenUnicorn24/Bmw/tree/feature/memepulse-v05-autopilot/memepulse
