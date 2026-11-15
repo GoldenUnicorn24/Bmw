@@ -6,6 +6,7 @@ import bs58 from 'bs58';
 import { confirmedPositions, exitSignal, safetyStatus, shouldHaltForUnknown } from './botPolicy.mjs';
 import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
 import { researchStatus } from './research/status.mjs';
+import { separateMarketReports } from './research/market-status.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -23,6 +24,8 @@ const RPC = env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const DATA_FILE = env.TRADE_LOG_PATH || './private/trades.json';
 const STOP_FILE = env.STOP_FILE || './STOP';
 const RESEARCH_REPORT_PATH = env.RESEARCH_REPORT_PATH || '';
+const MEME_RESEARCH_REPORT_PATH = env.MEME_RESEARCH_REPORT_PATH || '';
+const PENNY_RESEARCH_REPORT_PATH = env.PENNY_RESEARCH_REPORT_PATH || '';
 const MAX_TRADE = BigInt(Math.round(Number(env.MAX_TRADE_SOL || '0.01') * 1e9));
 const MAX_DAILY = BigInt(Math.round(Number(env.MAX_DAILY_SPEND_SOL || '0.05') * 1e9));
 const RESERVE = BigInt(Math.round(Number(env.MIN_SOL_RESERVE || '0.02') * 1e9));
@@ -447,6 +450,13 @@ const server = http.createServer(async (req, res) => {
     });
     if (req.method === 'GET' && url.pathname === '/api/research/status') {
       return reply(res, 200, researchStatus(RESEARCH_REPORT_PATH));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/research/markets') {
+      return reply(res, 200, separateMarketReports({
+        memePath:MEME_RESEARCH_REPORT_PATH,
+        pennyPath:PENNY_RESEARCH_REPORT_PATH,
+        legacySolanaPath:RESEARCH_REPORT_PATH
+      }));
     }
     if (req.method === 'GET' && url.pathname === '/api/market') return reply(res, 200, {
       tokens: await marketFeed(), promotedFeed: true, source: 'DEX Screener', timestamp: Date.now()
