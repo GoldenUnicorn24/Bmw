@@ -78,7 +78,7 @@ class MemeStore(context: Context) {
     var paperBotEnabled by mutableStateOf(false)
     var paperBotWorking by mutableStateOf(false)
     var paperBotLastCheck by mutableLongStateOf(0L)
-    var paperBotLastResult by mutableStateOf("Noch keine Grok-Prüfung")
+    var paperBotLastResult by mutableStateOf("Noch kein Quant-Signal")
     val paperBotEvents = mutableStateListOf<String>()
     val agentEvents = mutableStateListOf<JSONObject>()
     val realPositions = mutableStateListOf<JSONObject>()
@@ -214,6 +214,59 @@ class MemeStore(context: Context) {
                     message = "Live-Daten fehlgeschlagen: " + (e.message ?: "Netzwerkfehler").take(100)
                 }
             }
+        }
+    }
+    // Discover any user-supplied Solana mint; no trading authorization is implied.
+    fun lookupMint(mint: String) {
+        val clean = mint.trim()
+        if (!Regex("^[1-9A-HJ-NP-Za-km-z]{32,44}$").matches(clean)) {
+            message = "Bitte vollständige Solana-Mint-Adresse eingeben (Base58)"
+            return
+        }
+        if (marketLoading) return
+        marketLoading = true
+        thread {
+            try {
+                val pairs = JSONArray(getJson("https://api.dexscreener.com/token-pairs/v1/solana/" +
+                    java.net.URLEncoder.encode(clean, "UTF-8")))
+                var best: JSONObject? = null
+                var maxLiq = -1.0
+                for (i in 0 until pairs.length()) {
+                    val pair = pairs.optJSONObject(i) ?: continue
+                    val base = pair.optJSONObject("baseToken") ?: continue
+                    if (base.optString("address") != clean) continue
+                    val liq = pair.optJSONObject("liquidity")?.optDouble("usd", 0.0) ?: 0.0
+                    if (liq > maxLiq) { maxLiq = liq; best = pair }
+                }
+                val p = best ?: error("Kein Solana-DEX-Markt zu dieser Mint-Adresse gefunden")
+                val b = p.optJSONObject("baseToken") ?: error("Fehlende Tokendaten")
+                val tx = p.optJSONObject("txns")?.optJSONObject("h1")
+                val tok = Coin(clean, b.optString("symbol", "???").take(16),
+                    b.optString("name", "Token").take(70),
+                    p.optString("priceUsd").toDoubleOrNull() ?: 0.0,
+                    p.optJSONObject("priceChange")?.optDouble("h1", Double.NaN) ?: Double.NaN,
+                    p.optJSONObject("liquidity")?.optDouble("usd", 0.0) ?: 0.0,
+                    p.optJSONObject("volume")?.optDouble("h24", 0.0) ?: 0.0,
+                    max(0.0, (System.currentTimeMillis() - p.optLong("pairCreatedAt", System.currentTimeMillis())) / 60000.0),
+                    tx?.optDouble("buys", 0.0) ?: 0.0, tx?.optDouble("sells", 0.0) ?: 0.0,
+                    true,
+                    p.optJSONObject("priceChange")?.optDouble("m5", Double.NaN) ?: Double.NaN,
+                    p.optJSONObject("priceChange")?.optDouble("h6", Double.NaN) ?: Double.NaN,
+                    p.optJSONObject("volume")?.optDouble("h1", Double.NaN) ?: Double.NaN,
+                    p.optDouble("fdv", 0.0))
+                if (!tok.price.isFinite() || tok.price <= 0) error("Kein gültiger Marktpreis")
+                main.post {
+                    coins.removeAll { it.mint == clean }
+                    coins.add(0, tok)
+                    realMarket = true
+                    marketTimestamp = System.currentTimeMillis()
+                    marketLoading = false
+                    message = "Mint geladen: " + tok.symbol + " · Signalanalyse erforderlich"
+                }
+            } catch (err: Exception) { main.post {
+                marketLoading = false
+                message = "Mint-Suche: " + (err.message ?: "Netzwerkfehler").take(120)
+            } }
         }
     }
     fun simulateDemoTick() {
@@ -405,10 +458,6 @@ class MemeStore(context: Context) {
         if (!paperMode) { message = "Simulation zuerst in den Einstellungen aktivieren"; return }
         if (!realMarket || System.currentTimeMillis() - marketTimestamp > 120000) {
             message = "Zuerst frische Live-Marktdaten im Radar abrufen"
-            return
-        }
-        if (!paperMode) {
-            message = "Simulation zuerst unter Einstellungen aktivieren"
             return
         }
         paperBotEnabled = true
