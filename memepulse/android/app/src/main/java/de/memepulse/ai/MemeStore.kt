@@ -53,6 +53,14 @@ class MemeStore(context: Context) {
     val positions = mutableStateListOf<PaperPosition>()
     val fills = mutableStateListOf<PaperFill>()
     val realTrades = mutableStateListOf<JSONObject>()
+    val livePositions = mutableStateListOf<JSONObject>()
+    val agentEvents = mutableStateListOf<JSONObject>()
+    var agentObservation by mutableStateOf<JSONObject?>(null)
+    var liveRisk by mutableStateOf<JSONObject?>(null)
+    var liveWalletSol by mutableStateOf<Double?>(null)
+    var paperAutoEnabled by mutableStateOf(prefs.getBoolean("paperAuto", false))
+    var paperAutoLastTick by mutableLongStateOf(0L)
+    var botRefreshAt by mutableLongStateOf(0L)
     val equityPoints = mutableStateListOf<Double>()
     var cash by mutableDoubleStateOf(1000.0)
     var message by mutableStateOf("Bereit · Paper Trading")
@@ -127,6 +135,38 @@ class MemeStore(context: Context) {
         recordEquity()
         save()
         message = "Paper SELL " + p.symbol + " · P&L " + usd(pnl)
+    }
+    fun paperAutoTick() {
+        if (!paperAutoEnabled || !realMarket || System.currentTimeMillis() - marketTimestamp > 125000L) return
+        if (System.currentTimeMillis() - paperAutoLastTick < 30000L) return
+        paperAutoLastTick = System.currentTimeMillis()
+        for (p in positions.toList()) {
+            val fresh = coins.find { it.mint == p.mint } ?: continue
+            val pct = (fresh.price / p.entry - 1.0) * 100
+            if (pct <= -12.0 || pct >= 25.0) {
+                paperSell(p)
+                message = "Paper-Autobot: " + if (pct <= -12.0) "Stop-Loss" else "Take-Profit" + " für " + p.symbol
+                return
+            }
+        }
+        val activeSymbols = positions.map { it.mint }.toSet()
+        val candidates = coins.filter { it.live && it.mint !in activeSymbols && it.score >= 85 && it.change1h in 3.0..15.0 }
+            .filter { c -> fills.none { it.side == "BUY" && it.symbol == c.symbol && System.currentTimeMillis() - it.at < 86400000 } }
+            .sortedByDescending { it.score }
+        val best = candidates.firstOrNull() ?: return
+        val amount = minOf(cash, equity() * .01, tradeUsd.toDoubleOrNull() ?: 10.0)
+        if (amount >= 0.5 && positions.size < 2) {
+            val before = tradeUsd
+            tradeUsd = amount.toString()
+            paperBuy(best)
+            tradeUsd = before
+            message = "Paper-Autobot: regelbasiert · " + best.symbol + " (KEINE KI)"
+        }
+    }
+    fun setPaperAuto(value: Boolean) {
+        paperAutoEnabled = value
+        prefs.edit().putBoolean("paperAuto", value).apply()
+        message = if (value) "Regelbasierter Paper-Autobot an (kein Echtgeld)" else "Paper-Autobot deaktiviert"
     }
     fun resetPaper() {
         cash = simulatedInitial
@@ -288,6 +328,7 @@ class MemeStore(context: Context) {
             save()
         }
         fetchRealHistory()
+        refreshLiveStatus()
     }
     fun fetchRealHistory() = asyncHistory()
     private fun asyncHistory() {
@@ -299,6 +340,30 @@ class MemeStore(context: Context) {
                     for (i in 0 until min(80, t.length())) realTrades.add(t.getJSONObject(i))
                 }
             } catch (_: Exception) { }
+        }
+    }
+    fun refreshLiveStatus() {
+        if (backendUrl.isBlank() || backendToken.isBlank()) return
+        thread {
+            try {
+                val wallet = backend("/api/wallet")
+                val portfolio = backend("/api/portfolio")
+                val agent = backend("/api/agent")
+                val status = backend("/api/status")
+                main.post {
+                    liveWalletSol = if (wallet.isNull("balanceSol")) null else wallet.optDouble("balanceSol")
+                    livePositions.clear()
+                    val p = portfolio.optJSONArray("positions") ?: JSONArray()
+                    for (i in 0 until p.length()) livePositions.add(p.getJSONObject(i))
+                    agentEvents.clear()
+                    val events = agent.optJSONArray("events") ?: JSONArray()
+                    for (i in 0 until events.length()) agentEvents.add(events.getJSONObject(i))
+                    agentObservation = agent.optJSONObject("lastObservation")
+                    liveRisk = portfolio.optJSONObject("risk")
+                    serverStatus = status
+                    botRefreshAt = System.currentTimeMillis()
+                }
+            } catch (e: Exception) { main.post { message = "Live-Status: " + (e.message ?: "nicht erreichbar").take(80) } }
         }
     }
     fun analyze(c: Coin) {
@@ -338,14 +403,17 @@ class MemeStore(context: Context) {
                 .put("confirm", "LIVE TRADE"))
             main.post { message = "Live Swap " + result.optString("status") + " · " + result.optString("signature").take(12) }
             fetchRealHistory()
+            refreshLiveStatus()
         }
     }
     fun startAgent() = async {
         val r = backend("/api/agent/start", JSONObject().put("confirm", "ACTIVATE AUTOMATIC LIVE TRADING"))
         main.post { message = "Auto-Trading aktiv – endet nach 30 Minuten"; serverStatus = serverStatus?.apply { put("autoActive", r.optBoolean("active")) } }
+        refreshLiveStatus()
     }
     fun stopAgent() = async {
         backend("/api/agent/stop", JSONObject())
         main.post { message = "Auto-Trading deaktiviert"; serverStatus = serverStatus?.apply { put("autoActive", false) } }
+        refreshLiveStatus()
     }
 }
