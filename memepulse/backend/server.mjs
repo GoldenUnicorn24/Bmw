@@ -8,6 +8,7 @@ import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
 import { researchStatus } from './research/status.mjs';
 import { separateMarketReports } from './research/market-status.mjs';
 import {createWithdrawalService,SOL_MAINNET_GENESIS} from './withdrawal.mjs';
+import {checkJupiterMessage,verifiedProgramIds} from './swapGuard.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -20,6 +21,7 @@ const LIVE = env.ENABLE_LIVE_TRADES === 'YES_I_ACCEPT_REAL_LOSSES';
 const AUTO_ALLOWED = env.ALLOW_AUTONOMOUS_LIVE === 'YES_I_ACCEPT_AUTONOMOUS_LOSSES';
 const ALLOWLIST = new Set((env.TRADING_ALLOWLIST || '').split(',').map(x => x.trim()).filter(Boolean));
 const JUPITER_KEY = env.JUPITER_API_KEY || '';
+const REVIEWED_SWAP_PROGRAM_IDS=verifiedProgramIds(env.SWAP_ALLOWED_PROGRAM_IDS||'');
 // No commercial AI API required: local, deterministic, auditable quant engine.
 const RPC = env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const DATA_FILE = env.TRADE_LOG_PATH || './private/trades.json';
@@ -44,6 +46,8 @@ if (!RPC.startsWith('https://')) throw Error('SOLANA_RPC_URL must be HTTPS');
 const signer = env.SOLANA_PRIVATE_KEY_B58 ? Keypair.fromSecretKey(bs58.decode(env.SOLANA_PRIVATE_KEY_B58)) : null;
 const address = signer?.publicKey.toBase58() || null;
 if (LIVE && (!signer || !JUPITER_KEY)) throw Error('Live mode requires SOLANA_PRIVATE_KEY_B58 and JUPITER_API_KEY.');
+if (LIVE && REVIEWED_SWAP_PROGRAM_IDS.size===0)
+  throw Error('Live signing requires a separately reviewed SWAP_ALLOWED_PROGRAM_IDS allowlist.');
 let journal = [];
 try { journal = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); if (!Array.isArray(journal)) throw Error('Bad log'); }
 catch (err) { if (err.code !== 'ENOENT') throw Error('Cannot load trade journal: ' + err.message); }
@@ -232,6 +236,10 @@ async function prepareOrder(body, source = 'MANUAL') {
   const quote = await jsonFetch('https://api.jup.ag/swap/v2/order?' + params,
     { headers: { 'x-api-key': JUPITER_KEY } });
   if (!quote.transaction || !quote.requestId || !quote.outAmount) throw Error('Jupiter hat keine handelbare Route geliefert');
+  const routeCheck=checkJupiterMessage(
+    VersionedTransaction.deserialize(Buffer.from(quote.transaction,'base64')),
+    {wallet:address,allowedProgramIds:REVIEWED_SWAP_PROGRAM_IDS,maxInputLamports:amount,orderMint:mint});
+  if(!routeCheck.approved)throw Error('Ungeprüfte Jupiter-Route: '+routeCheck.reasons.join('; '));
   if (Number.isFinite(Number(quote.priceImpactPct)) && quote.priceImpactPct !== null &&
     Math.abs(Number(quote.priceImpactPct)) > MAX_PRICE_IMPACT_PCT)
     throw Error('Jupiter-Preiswirkung oberhalb der Risikogrenze');
@@ -262,6 +270,7 @@ async function executeOrder(id, source) {
   if ((await rpc('getGenesisHash',[])) !== SOL_MAINNET_GENESIS)
     throw Error('Wrong Solana network before signing');
   prepared.delete(id);
+  if (order.source !== source) throw Error('Order source authorization changed');
   if (Date.now() - order.created > CONTROL_MAX_AGE_MS) throw Error('Quote ist zu alt');
   const balance = await balanceSol();
   const reasons = tradeRejectReasons({
@@ -283,23 +292,48 @@ async function executeOrder(id, source) {
   saveJournal(); // Block duplicate spending BEFORE broadcasting.
   try {
     const tx = VersionedTransaction.deserialize(Buffer.from(order.transaction, 'base64'));
-    if (!tx.message.staticAccountKeys.some(k => k.equals(signer.publicKey)))
-      throw Error('Signer nicht in der Jupiter-Transaktion gefunden');
+    const routeCheck=checkJupiterMessage(tx,{
+      wallet:address,allowedProgramIds:REVIEWED_SWAP_PROGRAM_IDS,
+      maxInputLamports:BigInt(order.amountLamports),orderMint:order.mint
+    });
+    if(!routeCheck.approved)throw Error('Signing refused: '+routeCheck.reasons.join('; '));
     tx.sign([signer]); // Secret remains on backend only.
+    const expectedSignature=bs58.encode(tx.signatures[0]);
     const signed = Buffer.from(tx.serialize()).toString('base64');
     const result = await jsonFetch('https://api.jup.ag/swap/v2/execute', {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': JUPITER_KEY },
       body: JSON.stringify({ signedTransaction: signed, requestId: order.requestId })
     });
-    entry.signature = result.signature || null;
-    entry.actualInputAtomic = result.totalInputAmount || null;
-    entry.actualOutputAtomic = result.totalOutputAmount || null;
-    entry.status = result.status === 'Success' ? 'SUCCESS' : 'FAILED';
-    entry.error = result.status === 'Success' ? null : String(result.error || result.code || 'Jupiter-Ausführung fehlgeschlagen');
-    if (entry.status === 'SUCCESS' && order.side === 'BUY') cooldown.set(order.mint, Date.now());
-    if (entry.status === 'SUCCESS') agentEvent('EXECUTION_' + order.side, order.mint.slice(0, 12) + ' · ' + source);
+    entry.signature=String(result.signature||'')||null;
+    saveJournal(); // Persist signature before further RPC calls.
+    if(result.status!=='Success'||result.signature!==expectedSignature)
+      throw Error('Jupiter execution not definitively successful or signed signature mismatch');
+    const input=String(result.totalInputAmount||''),output=String(result.totalOutputAmount||'');
+    if(!/^[1-9]\d*$/.test(input)||!/^[1-9]\d*$/.test(output))
+      throw Error('Jupiter actual token fills missing; manual chain reconciliation required');
+    const inputAtomic=BigInt(input),outputAtomic=BigInt(output);
+    if(inputAtomic>BigInt(order.amountLamports))
+      throw Error('Actual input exceeded approved maximum');
+    if(outputAtomic*10000n<
+      BigInt(order.estimatedOutputAtomic)*BigInt(10000-MAX_SLIPPAGE_BPS))
+      throw Error('Actual fill exceeded quote slippage budget');
+    let confirmed=false;
+    for(let attempt=0;attempt<5;attempt++){
+      const results=await rpc('getSignatureStatuses',[[expectedSignature],{searchTransactionHistory:true}]);
+      const st=results?.value?.[0];
+      if(st?.err)throw Error('RPC reports failed swap execution');
+      if(['confirmed','finalized'].includes(st?.confirmationStatus)){confirmed=true;break;}
+      await new Promise(resolve=>setTimeout(resolve,2000));
+    }
+    if(!confirmed)throw Error('Swap confirmation not independently observed');
+    entry.actualInputAtomic=input;
+    entry.actualOutputAtomic=output;
+    entry.status='SUCCESS';
+    entry.error=null;
+    if(order.side==='BUY')cooldown.set(order.mint,Date.now());
+    agentEvent('EXECUTION_'+order.side,order.mint.slice(0,12)+' · '+source);
     saveJournal();
-    return { id, status: entry.status, signature: entry.signature, error: entry.error || null };
+    return {id,status:'SUCCESS',signature:expectedSignature,error:null};
   } catch (err) {
     // May have landed despite timeout. Never auto-resubmit an unknown swap.
     entry.status = 'UNKNOWN';
@@ -455,7 +489,10 @@ const server = http.createServer(async (req, res) => {
       maxDailyRealizedLossSol: MAX_REALIZED_LOSS_SOL,
       risk: safetyStatus(journal, MAX_REALIZED_LOSS_SOL),
       withdrawals:withdrawalSvc.status(), stopped: fs.existsSync(STOP_FILE),
-      warning: 'Kein garantierter Profit. Sicherheitsprüfung ersetzt kein Audit.'
+      liveGuard:{requiredProgramReview:true,programsConfigured:REVIEWED_SWAP_PROGRAM_IDS.size,
+        rpcGenesisVerifiedOnSigning:true,localSignatureCrossCheck:true,
+        independentRpcConfirmation:true,externalSecurityAuditPassed:false},
+      warning: 'Keine produktive Freigabe: kein unabhängiger Audit und keine verifizierten echten Testtransaktionen.'
     });
     if (req.method === 'GET' && url.pathname === '/api/research/status') {
       return reply(res, 200, researchStatus(RESEARCH_REPORT_PATH));

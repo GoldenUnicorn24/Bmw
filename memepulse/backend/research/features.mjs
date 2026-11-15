@@ -1,6 +1,7 @@
 // OHLCV feature engineering; each vector uses candles up to and including index i.
 // Target uses future candles only in the offline learner, never in inference.
 // Features are dimensionless so pools with different quote denominations can be compared.
+import {simulateMemeExit} from './memeTargets.mjs';
 const numeric = x => Number.isFinite(Number(x)) ? Number(x) : NaN;
 const clip = (x,a,b) => Math.max(a,Math.min(b,x));
 const lnRatio = (a,b) => Math.log(a/b);
@@ -11,8 +12,8 @@ export const FEATURE_NAMES = [
   'volume_recent_vs_prior','green_candle_ratio','momentum_stability'
 ];
 export const LOOKBACK_CANDLES = 25;
-export const HORIZON_CANDLES = 12; // 60 minutes at 5-minute resolution
-export const FRICTION_PCT = 2.0; // highly uncertain placeholder for two-sided fee/slippage
+export const HORIZON_CANDLES = 24; // 120 minutes at 5-minute resolution
+export const FRICTION_PCT = 3.0; // conservative placeholder, NOT executable two-sided fee/slippage
 
 export function parseCandles(rows) {
   if (!Array.isArray(rows)) return [];
@@ -64,16 +65,15 @@ export function makeExamples(pool,candles,{stride=12,horizon=HORIZON_CANDLES,fri
   for(let i=LOOKBACK_CANDLES;i+horizon<c.length;i+=stride){
     const vector=featureVector(c,i);
     if(!vector)continue;
-    // Require a future candle at exactly the requested interval, not a distant gap.
-    const future=c[i+horizon];
-    if(future.time-c[i].time!==horizon*300)continue;
-    const grossPct=100*(future.close/c[i].close-1);
-    if(!Number.isFinite(grossPct)||Math.abs(grossPct)>1000)continue;
+    // Future candles label the trade result; never used by featureVector().
+    // Conservative stop-first on ambiguous intrabar spikes and no interpolation.
+    const outcome=simulateMemeExit(c,i,{maxCandles:horizon,frictionPct});
+    if(!outcome||Math.abs(outcome.grossPct)>1000)continue;
     out.push({
       pool,at:c[i].time,features:vector,
-      label:Number(grossPct>frictionPct),
-      grossPct:Number(grossPct.toFixed(4)),
-      netPct:Number((grossPct-frictionPct).toFixed(4)),
+      label:outcome.label,grossPct:outcome.grossPct,netPct:outcome.netPct,
+      exitReason:outcome.reason,durationMinutes:outcome.durationMinutes,
+      assumedRoundTripCostPct:frictionPct,
       horizonMinutes:horizon*5
     });
   }

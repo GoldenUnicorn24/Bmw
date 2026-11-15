@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/memepulse-v07-dual-market-research
+      - feature/memepulse-v08-meme-live-hardening
     paths:
       - "memepulse/**"
       - ".github/workflows/memepulse-dual-research.yml"
@@ -23,7 +24,8 @@ jobs:
           node-version: "22"
       - name: Check classification integrity and train verified Solana meme coins
         env:
-          MEME_COIN_LIMIT: "9"
+          MEME_COIN_LIMIT: "25"
+          MEME_CANDLE_PAGES: "2"
           ENABLE_LIVE_TRADES: "NO"
           ALLOW_AUTONOMOUS_LIVE: "NO"
         working-directory: memepulse/backend
@@ -40,6 +42,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
   penny-stock-research:
+    if: github.ref == 'refs/heads/feature/memepulse-v07-dual-market-research'
     runs-on: ubuntu-latest
     timeout-minutes: 24
     steps:

@@ -1,4 +1,4 @@
-# MemePulse AI v0.6 — Native Android Trading Terminal
+# MemePulse AI v0.8 — Native Android Trading Terminal
 
 Eine eigenständige Android-App und Node.js-Solana-Trading-Backend im separaten Feature-Branch des BMW-Repositories. Das vorhandene BMW-Projekt unter /app bleibt unverändert.
 
@@ -16,7 +16,7 @@ MemePulse nutzt die selbst programmierte **Autopilot 2**:
 Dies ist ein **regelbasiertes** Trading-Modell und **kein** trainiertes neuronales Netz. Es hat keine nachgewiesene Gewinnerwartung.
 
 
-## v0.6: Mehrstufiger Autopilot
+## v0.8: Mehrstufiger Autopilot
 
 - Mindestens drei unabhängige Kursmessungen über mindestens zwei Minuten, bevor neue Echtgeldpositionen eröffnet werden dürfen.
 - Zusätzliche Filter gegen Pump-Spikes, schnelle Trendwenden und Liquiditätsabflüsse.
@@ -27,6 +27,19 @@ Dies ist ein **regelbasiertes** Trading-Modell und **kein** trainiertes neuronal
 - Android-Paper-Engine verwendet ebenfalls mehrere unabhängige Kursbestätigungen. Simulationsmodus nur unter Einstellungen einstellbar.
 
 **Wichtig:** Es ist kein trainiertes neuronales Netzwerk, kein nachgewiesen profitables System und kein vollautomatischer Custody-Dienst. Ohne Wallet- und Backend-Setup kann die App keine echten Transaktionen ausführen. Einzahlungen allein autorisieren nie eine Handelssitzung. Server-/RPC-Ausfälle, Liquidität und Slippage können automatisches Verkaufen verhindern.
+
+## NEU: v0.8 Meme-Training und sicherheitsgeprüfte Transaktionsfreigabe
+
+Vollständige Erklärung: [MEME-LIVE-READINESS-DE.md](MEME-LIVE-READINESS-DE.md).
+
+- Erweitertes CoinGecko-kategorisiertes Solana-Meme-Training mit verifizierter Mint und zusätzlichen echten historischen GeckoTerminal-Kerzen.
+- Research-Labels: 120 Minuten, konservative Stop-Loss-/Take-Profit-Simulation einschließlich Gaps und angenommener 3 % Roundtrip-Kosten. Holdout-Tests für spätere Zeiträume und ungesehene Pools.
+- Das trainierte Meme-Modell bleibt RESEARCH-ONLY. Es kann keine realen Trading-Orders freigeben.
+- Der bereits vorhandene, ausdrücklich freizugebende Solana-Tradingserver prüft Jupiter-Transaktionen vor Signatur auf zugelassene ausführbare Programme, den einzigen Wallet-Signer, erlaubte Transferziele, riskante Token-Instruktionen und Gebührenobergrenzen.
+- Signatur muss mit der lokal erzeugten Signatur übereinstimmen; erst nach unabhängiger RPC-Bestätigung darf das Ledger einen Swap als erfolgreich verbuchen.
+- Vollständig synthetische Integrationsprüfungen, keine echten Mainnet-Swap-Tests.
+- SWAP_ALLOWED_PROGRAM_IDS muss vor Live-Betrieb von einem unabhängigen Auditor geprüft und konfiguriert werden.
+- Noch nicht als produktiver Echtgeld-Service betriebsbereit: Kein echter Mainnet-Minimaltest, kein geprüfter Rückzahlungsweg, kein Security-Audit. Kein echtes Geld einzahlen.
 
 ## Android
 - Kotlin + Jetpack Compose, Android 8+
@@ -48,7 +61,7 @@ Dies ist ein **regelbasiertes** Trading-Modell und **kein** trainiertes neuronal
 
 ## Android Build
 GitHub Actions -> **MemePulse AI - Android APK** -> neuester erfolgreicher Lauf auf
-**feature/memepulse-v06-train-lab** -> **Artifacts** -> MemePulseAI-Android-v0.6-debug-APK.
+**feature/memepulse-v08-meme-live-hardening** -> **Artifacts** -> MemePulseAI-Android-v0.8-debug-APK.
 
 Lokal (Android SDK 35, Gradle 8.12, JDK 17):
 

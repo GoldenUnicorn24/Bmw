@@ -33,9 +33,9 @@ test('labels are strictly 60-minute future returns with cost estimate',()=>{
   const c=candles();
   const x=makeExamples('pool',c);
   assert.ok(x.length>5);
-  assert.equal(x[0].horizonMinutes,60);
+  assert.equal(x[0].horizonMinutes,120);
   assert.equal(x[0].at,c[25][0]);
-  assert.ok(Math.abs(x[0].netPct-(x[0].grossPct-2))<.0001);
+  assert.ok(Math.abs(x[0].netPct-(x[0].grossPct-3))<.0001);
   assert.ok(x.every(y=>[0,1].includes(y.label)&&y.features.length===10));
 });
 test('research models cannot automatically authorize real trades',()=>{
