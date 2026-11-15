@@ -48,7 +48,7 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 MiniLabel("◈   AI ENGINE / CONTROL CENTER", bright)
-                MiniLabel("v0.5  AUTOPILOT 2", secondary)
+                MiniLabel("v0.6  TRAINING LAB", secondary)
             }
             Spacer(Modifier.height(1.dp))
             Text("Trade smarter.", color = white, fontSize = 30.sp, fontWeight = FontWeight.Black, lineHeight = 34.sp)
@@ -164,6 +164,40 @@ fun BotScreen(s: MemeStore, onAutoConfirm: () -> Unit) {
                 }
             }
         }
+        }
+        Text("TRAINING LAB · AUSWERTUNG", color = white, fontWeight = FontWeight.Black,
+            fontSize = 15.sp, letterSpacing = .6.sp)
+        Surface(color = tile, shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.fillMaxWidth().padding(17.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("Statistisches Forschungsmodell", color = white,
+                        fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    StatusPill("NUR BEOBACHTUNG", bright)
+                }
+                val report = s.researchReport
+                val status = report?.optString("status") ?: "KEIN BERICHT VERBUNDEN"
+                BotLine("Validierungsstatus", status.take(26), if (status == "RESEARCH_GATE_PASSED") mint else secondary)
+                BotLine("Marktbeispiele", (report?.optInt("sampleCount", 0) ?: 0).toString(), white)
+                val stats = report?.optJSONObject("metrics")
+                val forward = stats?.optJSONObject("chronological")
+                val unseen = stats?.optJSONObject("unseenPools")
+                if (forward != null) {
+                    BotLine("Späterer Zeitraum", forward.optInt("samples", 0).toString() + " Beispiele", white)
+                    BotLine("Treffer nach Kosten-Simulation",
+                        if (forward.isNull("precision")) "Nicht bestimmbar"
+                        else String.format(Locale.US, "%.1f %%", forward.optDouble("precision") * 100), white)
+                }
+                if (unseen != null) {
+                    BotLine("Ungelesene Pools", unseen.optInt("samples", 0).toString() + " Beispiele", white)
+                }
+                Text("Diese Auswertung wird von deinem Server geladen. Historische Kerzendaten sind keine ausführbaren Swaps. Das Forschungsmodell darf keine Echtgeld-Order autorisieren.",
+                    color = secondary, fontSize = 11.sp, lineHeight = 16.sp)
+                OutlinedButton(onClick = { s.refreshResearchStatus() },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("↻ Trainingsbericht laden", color = bright)
+                }
+            }
         }
         Text("02   BOT-AKTIVITÄTEN", color = white, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = .6.sp)
         Surface(color = tile, shape = RoundedCornerShape(19.dp)) {
