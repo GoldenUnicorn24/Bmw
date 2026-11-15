@@ -1,0 +1,51 @@
+name: MemePulse - public market research (3x weekly)
+on:
+  schedule:
+    # UTC: Monday, Wednesday, Saturday; research only, NO live trades.
+    - cron: '20 3 * * 1,3,6'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: memepulse-research-main
+  cancel-in-progress: false
+jobs:
+  backtest-public-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout isolated MemePulse training source branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/memepulse-v06-train-lab
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Restore expanding historical OHLCV candle archive
+        uses: actions/cache@v4
+        with:
+          path: memepulse/backend/research-output/dataset.json
+          key: memepulse-nightly-history-${{ github.run_id }}
+          restore-keys: |
+            memepulse-nightly-history-
+      - name: Verify source and train only with PUBLIC real historical data
+        working-directory: memepulse/backend
+        env:
+          RESEARCH_POOL_LIMIT: "18"
+          ENABLE_LIVE_TRADES: "NO"
+          ALLOW_AUTONOMOUS_LIVE: "NO"
+        run: |
+          node --check research/features.mjs
+          node --check research/learner.mjs
+          node --check scripts/collect-and-train.mjs
+          npm test
+          npm run train:research
+      - name: Publish research-only dataset and untouched holdout report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemePulse-real-market-research-${{ github.run_id }}
+          path: memepulse/backend/research-output/
+          retention-days: 30
+          if-no-files-found: warn
