@@ -8,6 +8,8 @@ import { analyzeMarket, combineWithSecurity } from './strategy.mjs';
 import { researchStatus } from './research/status.mjs';
 import { separateMarketReports } from './research/market-status.mjs';
 import {createWithdrawalService,SOL_MAINNET_GENESIS} from './withdrawal.mjs';
+import {inspectSwapTransaction,checkJupiterExecution,verifySwapChainReceipt,
+  waitForConfirmedReceipt} from './swapGuard.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -232,6 +234,14 @@ async function prepareOrder(body, source = 'MANUAL') {
   const quote = await jsonFetch('https://api.jup.ag/swap/v2/order?' + params,
     { headers: { 'x-api-key': JUPITER_KEY } });
   if (!quote.transaction || !quote.requestId || !quote.outAmount) throw Error('Jupiter hat keine handelbare Route geliefert');
+  if (quote.inputMint && quote.inputMint !== params.get('inputMint'))
+    throw Error('Jupiter quoted unexpected input mint');
+  if (quote.outputMint && quote.outputMint !== params.get('outputMint'))
+    throw Error('Jupiter quoted unexpected output mint');
+  // Reject unsupported, multisigner and opaque program-ID transactions BEFORE
+  // creating a quote. This checks the envelope, not the audited swap semantics.
+  const unsignedTx = VersionedTransaction.deserialize(Buffer.from(quote.transaction, 'base64'));
+  inspectSwapTransaction(unsignedTx, signer.publicKey);
   if (Number.isFinite(Number(quote.priceImpactPct)) && quote.priceImpactPct !== null &&
     Math.abs(Number(quote.priceImpactPct)) > MAX_PRICE_IMPACT_PCT)
     throw Error('Jupiter-Preiswirkung oberhalb der Risikogrenze');
@@ -275,33 +285,50 @@ async function executeOrder(id, source) {
   if (order.side === 'BUY' && confirmedPositions(journal).positions.some(p => p.mint === order.mint))
     reasons.push('Token bereits gehalten');
   if (reasons.length) throw Error('Trade wegen Limit gestoppt: ' + reasons.join('; '));
+  // No journal entry if a route fails local structural validation; no transfer
+  // could have been signed or sent at this point.
+  const tx = VersionedTransaction.deserialize(Buffer.from(order.transaction, 'base64'));
+  const inspected = inspectSwapTransaction(tx, signer.publicKey);
+  if (!inspected?.payer) throw Error('Unverified Jupiter route');
+  tx.sign([signer]); // The only permitted signer; secret never leaves backend.
+  const signed = Buffer.from(tx.serialize()).toString('base64');
+  const localSignature = bs58.encode(Buffer.from(tx.signatures[0]));
   const entry = { id, at: Date.now(), side: order.side, mint: order.mint,
     amountLamports: order.amountLamports, estimatedOutputAtomic: order.estimatedOutputAtomic,
-    entryPriceUsd: order.market?.priceUsd ?? null,
-    source, status: 'SUBMITTED', signature: null };
+    entryPriceUsd: order.market?.priceUsd ?? null, source, status: 'SUBMITTED',
+    signature: localSignature, envelope: inspected, rpcReceiptChecked: false };
   journal.push(entry);
-  saveJournal(); // Block duplicate spending BEFORE broadcasting.
+  saveJournal(); // Persistent unknown-risk lock BEFORE any broadcast.
   try {
-    const tx = VersionedTransaction.deserialize(Buffer.from(order.transaction, 'base64'));
-    if (!tx.message.staticAccountKeys.some(k => k.equals(signer.publicKey)))
-      throw Error('Signer nicht in der Jupiter-Transaktion gefunden');
-    tx.sign([signer]); // Secret remains on backend only.
-    const signed = Buffer.from(tx.serialize()).toString('base64');
     const result = await jsonFetch('https://api.jup.ag/swap/v2/execute', {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': JUPITER_KEY },
       body: JSON.stringify({ signedTransaction: signed, requestId: order.requestId })
     });
-    entry.signature = result.signature || null;
-    entry.actualInputAtomic = result.totalInputAmount || null;
-    entry.actualOutputAtomic = result.totalOutputAmount || null;
-    entry.status = result.status === 'Success' ? 'SUCCESS' : 'FAILED';
-    entry.error = result.status === 'Success' ? null : String(result.error || result.code || 'Jupiter-Ausführung fehlgeschlagen');
-    if (entry.status === 'SUCCESS' && order.side === 'BUY') cooldown.set(order.mint, Date.now());
-    if (entry.status === 'SUCCESS') agentEvent('EXECUTION_' + order.side, order.mint.slice(0, 12) + ' · ' + source);
+    const verified = checkJupiterExecution(result, tx, order,
+      { maxSlippageBps: MAX_SLIPPAGE_BPS });
+    // Provider "Success" is insufficient for local wallet accounting:
+    // demand a matching signature and a successful, independent RPC receipt.
+    const receipt = await waitForConfirmedReceipt(rpc, verified.signature);
+    const chain = verifySwapChainReceipt(receipt,{
+      signature: verified.signature, side: order.side, mint: order.mint,
+      wallet: address, inputAtomic: verified.inputAtomic,
+      outputAtomic: verified.outputAtomic
+    });
+    entry.actualInputAtomic = verified.inputAtomic;
+    entry.actualOutputAtomic = verified.outputAtomic;
+    entry.rpcReceiptChecked = true;
+    entry.chainTokenDeltaAtomic = chain.changedTokenAtomic;
+    entry.chainNativeSolDeltaAtomic = chain.nativeSolDeltaLamports;
+    entry.status = 'SUCCESS';
+    entry.confirmedAt = Date.now();
+    if (order.side === 'BUY') cooldown.set(order.mint, Date.now());
+    agentEvent('CONFIRMED_' + order.side, order.mint.slice(0, 12) + ' · ' + source);
     saveJournal();
-    return { id, status: entry.status, signature: entry.signature, error: entry.error || null };
+    return { id, status: 'SUCCESS', signature: verified.signature,
+      rpcReceiptChecked: true, error: null };
   } catch (err) {
-    // May have landed despite timeout. Never auto-resubmit an unknown swap.
+    // The chain might have landed despite timeout/ambiguous provider result.
+    // NEVER treat this as an order to automatically retry.
     entry.status = 'UNKNOWN';
     entry.error = String(err.message).slice(0, 200);
     saveJournal();
