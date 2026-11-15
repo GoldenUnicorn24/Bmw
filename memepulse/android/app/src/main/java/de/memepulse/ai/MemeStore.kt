@@ -237,6 +237,50 @@ class MemeStore(context: Context) {
             }
         }
     }
+    fun lookupMint(mintInput: String) {
+        val mint = mintInput.trim()
+        if (!Regex("^[1-9A-HJ-NP-Za-km-z]{32,44}$").matches(mint)) {
+            message = "Bitte eine gültige Solana-Mint-Adresse eingeben"
+            return
+        }
+        if (marketLoading) return
+        marketLoading = true
+        thread {
+            try {
+                val pairs = JSONArray(getJson("https://api.dexscreener.com/token-pairs/v1/solana/" + mint))
+                var best: Coin? = null
+                for (i in 0 until pairs.length()) {
+                    val pair = pairs.optJSONObject(i) ?: continue
+                    val base = pair.optJSONObject("baseToken") ?: continue
+                    if (base.optString("address") != mint) continue
+                    val liq = pair.optJSONObject("liquidity")?.optDouble("usd", 0.0) ?: 0.0
+                    val created = pair.optLong("pairCreatedAt", System.currentTimeMillis())
+                    val trade = pair.optJSONObject("txns")?.optJSONObject("h1")
+                    val candidate = Coin(mint, base.optString("symbol", "???").take(16),
+                        base.optString("name", "Token").take(70),
+                        pair.optString("priceUsd").toDoubleOrNull() ?: 0.0,
+                        pair.optJSONObject("priceChange")?.optDouble("h1", 0.0) ?: 0.0,
+                        liq, pair.optJSONObject("volume")?.optDouble("h24", 0.0) ?: 0.0,
+                        max(0.0, (System.currentTimeMillis() - created) / 60000.0),
+                        trade?.optDouble("buys", 0.0) ?: 0.0,
+                        trade?.optDouble("sells", 0.0) ?: 0.0, true)
+                    if (candidate.price > 0 && (best?.liquidity ?: -1.0) < liq) best = candidate
+                }
+                val found = best ?: error("Keine Solana-Paarung mit handelbarem USD-Kurs")
+                main.post {
+                    if (!realMarket) coins.clear()
+                    coins.removeAll { it.mint == mint }
+                    coins.add(0, found)
+                    realMarket = true
+                    marketTimestamp = System.currentTimeMillis()
+                    marketLoading = false
+                    message = "Mint geladen: " + found.symbol + ". Vor echten Trades RugCheck durchführen."
+                }
+            } catch (e: Exception) {
+                main.post { marketLoading = false; message = "Mint-Suche: " + (e.message ?: "Netzwerkfehler").take(120) }
+            }
+        }
+    }
     fun simulateDemoTick() {
         if (realMarket) return
         for (i in coins.indices) {
