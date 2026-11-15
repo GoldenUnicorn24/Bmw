@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import bs58 from 'bs58';
 import {Keypair,VersionedTransaction,TransactionMessage,ComputeBudgetProgram,
-  SystemProgram,TOKEN_PROGRAM_ID,PublicKey} from '@solana/web3.js';
+  SystemProgram,PublicKey} from '@solana/web3.js';
 import {inspectSwapTransaction,validateSwapSimulation,checkJupiterExecution,
   verifySwapChainReceipt,waitForConfirmedReceipt} from '../swapGuard.mjs';
 const wallet=Keypair.generate();
@@ -13,6 +13,7 @@ function signed(ixs){
   instructions:ixs}).compileToV0Message();
  const tx=new VersionedTransaction(msg);tx.sign([wallet]);return tx;
 }
+const TOKEN_PROGRAM_ID=new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const intent={side:'BUY',mint:token,amountLamports:'10000000'};
 const wsolAta=PublicKey.findProgramAddressSync([
  wallet.publicKey.toBuffer(),TOKEN_PROGRAM_ID.toBuffer(),
