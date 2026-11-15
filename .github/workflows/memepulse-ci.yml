@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/memepulse-ai-android
+      - feature/memepulse-v03-pro-trader
     paths:
       - "memepulse/**"
       - ".github/workflows/memepulse-ci.yml"
