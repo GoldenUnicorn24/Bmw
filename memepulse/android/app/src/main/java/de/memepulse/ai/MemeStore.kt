@@ -443,4 +443,21 @@ class MemeStore(context: Context) {
         main.post { message = "Auto-Trading deaktiviert"; serverStatus = serverStatus?.apply { put("autoActive", false) } }
         refreshLiveStatus()
     }
+    fun emergencyStop() {
+        thread {
+            try {
+                backend("/api/emergency/stop", JSONObject().put("confirm", "STOP ALL LIVE TRADING"))
+                main.post {
+                    message = "NOT-AUS: Alle neuen Echtgeld-Trades sind gesperrt"
+                    serverStatus = serverStatus?.apply { put("stopped", true); put("autoActive", false) }
+                }
+                refreshLiveStatus()
+            } catch (e: Exception) { main.post { message = "NOT-AUS fehlgeschlagen: " + (e.message ?: "Server nicht erreichbar").take(160) } }
+        }
+    }
+    fun emergencyResume() = async {
+        backend("/api/emergency/resume", JSONObject().put("confirm", "I ACCEPT RESUMING REAL TRADES"))
+        main.post { message = "Manuelle Trades freigeschaltet; KI bleibt AUS" }
+        refreshLiveStatus()
+    }
 }
