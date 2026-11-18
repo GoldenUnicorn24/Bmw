@@ -89,6 +89,11 @@ class MemeStore(context: Context) {
     var strategyHealth by mutableStateOf<JSONObject?>(null)
     var researchReport by mutableStateOf<JSONObject?>(null)
     var marketResearchReport by mutableStateOf<JSONObject?>(null)
+    var readiness by mutableStateOf<JSONObject?>(null)
+    var withdrawalStatus by mutableStateOf<JSONObject?>(null)
+    var withdrawalPreview by mutableStateOf<JSONObject?>(null)
+    var withdrawalAmount by mutableStateOf("0.01")
+    var withdrawalFactor by mutableStateOf("") // RAM only, never persisted or logged
     var botRisk by mutableStateOf<JSONObject?>(null)
     private val simulatedInitial = 1000.0
     private val marketHistory = mutableMapOf<String, MutableList<MarketProbe>>()
@@ -323,13 +328,14 @@ class MemeStore(context: Context) {
         } catch (_: Exception) { positions.clear(); fills.clear(); equityPoints.clear(); cash = 1000.0 }
         if (equityPoints.isEmpty()) equityPoints.add(simulatedInitial)
     }
-    private fun getJson(url: String, body: JSONObject? = null, authenticated: Boolean = false): String {
+    private fun getJson(url: String, body: JSONObject? = null, authenticated: Boolean = false, withdrawalAuth: String? = null): String {
         val con = URL(url).openConnection() as HttpURLConnection
         if (con.url.protocol != "https") error("Nur verschlüsselte HTTPS-Verbindungen sind erlaubt")
         con.connectTimeout = 13000
         con.readTimeout = 15000
         con.setRequestProperty("Accept", "application/json")
         if (authenticated) con.setRequestProperty("Authorization", "Bearer " + backendToken)
+        if (withdrawalAuth != null) con.setRequestProperty("x-withdrawal-authorization", withdrawalAuth)
         if (body != null) {
             con.requestMethod = "POST"
             con.doOutput = true
@@ -346,12 +352,15 @@ class MemeStore(context: Context) {
             return raw
         } finally { con.disconnect() }
     }
-    private fun backend(path: String, body: JSONObject? = null): JSONObject {
+    private fun backend(path: String, body: JSONObject? = null, withdrawal: Boolean = false): JSONObject {
         val base = backendUrl.trim().removeSuffix("/")
         if (!base.startsWith("https://") || backendToken.length < 32) {
             error("HTTPS-Serveradresse und API-Token mit mindestens 32 Zeichen erforderlich")
         }
-        return JSONObject(getJson(base + path, body, true))
+        // Never transmit the separate withdrawal secret outside these dedicated endpoints.
+        if (withdrawal && !path.startsWith("/api/wallet/withdrawal/")) error("Ungültiges Auszahlungsziel")
+        return JSONObject(getJson(base + path, body, true,
+            if (withdrawal) withdrawalFactor else null))
     }
     private fun async(action: () -> Unit) {
         if (requesting) return
@@ -375,6 +384,8 @@ class MemeStore(context: Context) {
         refreshRealPositions()
         refreshDeposit()
         refreshResearchStatus()
+        refreshReadiness()
+        refreshWithdrawalStatus()
     }
     fun fetchRealHistory() = asyncHistory()
     private fun asyncHistory() {
@@ -439,7 +450,7 @@ class MemeStore(context: Context) {
     }
     fun startAgent() = async {
         val r = backend("/api/agent/start", JSONObject().put("confirm", "ACTIVATE AUTOMATIC LIVE TRADING"))
-        main.post { message = "Auto-Trading aktiv – endet nach 30 Minuten"; serverStatus = serverStatus?.apply { put("autoActive", r.optBoolean("active")) } }
+        main.post { message = "Autopilot aktiviert – endet nach dem vom Server begrenzten Zeitraum"; serverStatus = serverStatus?.apply { put("autoActive", r.optBoolean("active")) } }
     }
     fun stopAgent() = async {
         backend("/api/agent/stop", JSONObject())
@@ -573,6 +584,77 @@ class MemeStore(context: Context) {
                 }
             } catch (_: Exception) { }
         }
+    }
+    fun refreshReadiness() {
+        if (backendToken.length < 32) { message = "Zuerst Backend verbinden"; return }
+        thread {
+            try {
+                val state = backend("/api/readiness")
+                main.post {
+                    readiness = state
+                    message = "Sicherheitsprüfungen: " + state.optInt("checksPassed") + "/" +
+                        state.optInt("checkCount") + " · Keine Echtgeldfreigabe ohne Prüfung"
+                }
+            } catch (err: Exception) { main.post {
+                message = "Sicherheitsprüfung: " + (err.message ?: "Fehler").take(120)
+            } }
+        }
+    }
+    fun refreshWithdrawalStatus() {
+        if (backendToken.length < 32) return
+        thread {
+            try {
+                val status = backend("/api/wallet/withdrawal/status")
+                main.post {
+                    withdrawalStatus = status
+                    withdrawalPreview = null
+                }
+            } catch (_: Exception) { }
+        }
+    }
+    fun prepareWithdrawal() {
+        if (paperMode) { message = "Bitte Simulation unter Einstellungen deaktivieren"; return }
+        if (withdrawalStatus?.optBoolean("enabled") != true) {
+            message = "Auszahlung am sicheren Server noch nicht freigeschaltet"
+            return
+        }
+        val amount = withdrawalAmount.toDoubleOrNull()
+        if (amount == null || !amount.isFinite() || amount <= 0.0 ||
+            withdrawalFactor.length < 32) {
+            message = "Gültiger SOL-Betrag und separater Freigabecode erforderlich"
+            return
+        }
+        async {
+            val preview = backend("/api/wallet/withdrawal/prepare",
+                JSONObject().put("amountSol", amount), withdrawal = true)
+            main.post { withdrawalPreview = preview
+                message = "Auszahlungsvorschau bereit – noch kein SOL versendet" }
+        }
+    }
+    fun executeWithdrawal() {
+        val preview = withdrawalPreview ?: return
+        withdrawalPreview = null
+        async {
+            try {
+                val res = backend("/api/wallet/withdrawal/execute",
+                    JSONObject().put("previewId", preview.optString("previewId"))
+                        .put("confirm", "CONFIRM SOLANA WITHDRAWAL"),
+                    withdrawal = true)
+                main.post {
+                    message = "SOL-Auszahlung: " + res.optString("status") +
+                        " · Tx " + res.optString("signature").take(16) + "…"
+                    refreshDeposit()
+                    refreshRealPositions()
+                }
+            } finally {
+                main.post { withdrawalFactor = "" }
+            }
+        }
+    }
+    fun cancelWithdrawal() {
+        withdrawalPreview = null
+        withdrawalFactor = ""
+        message = "Auszahlungsvorschau verworfen"
     }
     fun refreshDeposit() {
         if (backendToken.length < 32) { message = "Zuerst Trading-Server verbinden"; return }

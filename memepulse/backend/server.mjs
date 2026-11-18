@@ -9,6 +9,7 @@ import { researchStatus } from './research/status.mjs';
 import { separateMarketReports } from './research/market-status.mjs';
 import {createWithdrawalService,SOL_MAINNET_GENESIS} from './withdrawal.mjs';
 import {checkJupiterMessage,verifiedProgramIds} from './swapGuard.mjs';
+import {saveDurableJournal,loadJournal} from './durableJournal.mjs';
 import {appendSnapshot,confirmHistory,sizeBuy,dailyRemaining,strategyHealth,evaluateExit} from './autopilot.mjs';
 import { WSOL, marketScore, marketRejectReasons, rugRejectReasons, tradeRejectReasons, validateSignal } from './risk.mjs';
 
@@ -48,9 +49,7 @@ const address = signer?.publicKey.toBase58() || null;
 if (LIVE && (!signer || !JUPITER_KEY)) throw Error('Live mode requires SOLANA_PRIVATE_KEY_B58 and JUPITER_API_KEY.');
 if (LIVE && REVIEWED_SWAP_PROGRAM_IDS.size===0)
   throw Error('Live signing requires a separately reviewed SWAP_ALLOWED_PROGRAM_IDS allowlist.');
-let journal = [];
-try { journal = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); if (!Array.isArray(journal)) throw Error('Bad log'); }
-catch (err) { if (err.code !== 'ENOENT') throw Error('Cannot load trade journal: ' + err.message); }
+let journal=loadJournal(DATA_FILE);
 let busy = false;
 let activeUntil = 0;
 let exitOnlyUntil = 0;
@@ -75,10 +74,7 @@ const lastConfirmed = new Map();
 let lastStrategyHealth = null;
 
 function saveJournal() {
-  fs.mkdirSync(new URL('.', 'file://' + (DATA_FILE.startsWith('/') ? DATA_FILE : process.cwd() + '/' + DATA_FILE)), { recursive: true, mode: 0o700 });
-  const tmp = DATA_FILE + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(journal.slice(-1000), null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, DATA_FILE);
+  saveDurableJournal(DATA_FILE,journal);
 }
 function reply(res, status, value) {
   const raw = JSON.stringify(value);
@@ -476,6 +472,36 @@ const server = http.createServer(async (req, res) => {
   if (!authenticated(req)) return reply(res, 401, { error: 'Bearer-Authentifizierung erforderlich' });
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (req.method === 'GET' && url.pathname === '/api/readiness') {
+      let network='UNVERIFIED',rpcError=null;
+      try {
+        const genesis=await rpc('getGenesisHash',[]);
+        network=genesis===SOL_MAINNET_GENESIS?'MAINNET_VERIFIED':'WRONG_NETWORK';
+      }catch(e){network='RPC_UNAVAILABLE';rpcError=String(e.message).slice(0,100);}
+      const withdraw=withdrawalSvc.status();
+      const checks=[
+        {key:'server',label:'Backend gestartet und authentifiziert',passed:true},
+        {key:'network',label:'RPC ist Solana Mainnet',passed:network==='MAINNET_VERIFIED'},
+        {key:'wallet',label:'Eigene separate Hot-Wallet konfiguriert',passed:!!signer},
+        {key:'jupiter',label:'Jupiter API konfiguriert',passed:!!JUPITER_KEY},
+        {key:'allowlist',label:'Mindestens eine manuell geprüfte Mint-Adresse',passed:ALLOWLIST.size>0},
+        {key:'swap_review',label:'Freigegebene Programme hinterlegt',passed:REVIEWED_SWAP_PROGRAM_IDS.size>0},
+        {key:'withdrawal',label:'Manuelle eigene Auszahlung aktiviert',passed:withdraw.enabled},
+        {key:'no_unknown',label:'Keine unklaren Transaktionen',passed:!shouldHaltForUnknown(journal)&&!withdraw.pendingReconciliation},
+        {key:'no_stop',label:'Not-Aus nicht aktiviert',passed:!fs.existsSync(STOP_FILE)},
+        // These checks may only be marked true by INDEPENDENT evidence, not code claims.
+        {key:'live_e2e',label:'Kauf, Verkauf und Auszahlung mit echtem Minimalbetrag getestet',passed:false},
+        {key:'audit',label:'Unabhängiger Sicherheits-Audit erfolgreich',passed:false}
+      ];
+      return reply(res,200,{
+        version:'v0.9-readiness',timestamp:Date.now(),network,rpcError,
+        checkCount:checks.length,checksPassed:checks.filter(x=>x.passed).length,
+        checks,liveExecutionFlag:LIVE,autonomousFlag:AUTO_ALLOWED,
+        receivingDepositsRecommended:false,productionReady:false,
+        walletAddress:address,
+        warning:'No production clearance: external audit and REAL purchase/sell/withdraw tests missing. Do not deposit real funds.'
+      });
+    }
     if (req.method === 'GET' && url.pathname === '/api/status') return reply(res, 200, {
       live: LIVE, autoAllowed: AUTO_ALLOWED, autoActive: activeUntil > Date.now(),
       exitOnlyActive: exitOnlyUntil > Date.now() && activeUntil <= Date.now(),

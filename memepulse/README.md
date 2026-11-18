@@ -1,8 +1,10 @@
-# MemePulse AI v0.8 — Native Android Trading Terminal
+# MemePulse AI v0.9 — Native Android Trading Terminal
 
 Eine eigenständige Android-App und Node.js-Solana-Trading-Backend im separaten Feature-Branch des BMW-Repositories. Das vorhandene BMW-Projekt unter /app bleibt unverändert.
 
-**Vollständige Anleitung auf Deutsch: [SETUP-DE.md](SETUP-DE.md)**
+**Aktuelle Anleitung und realistischer Echtgeld-Abnahmestand: [ABNAHME-REALGELD-DE.md](ABNAHME-REALGELD-DE.md)**.
+
+**v0.9:** Sicherheitscheck im Android-Einstellungsbereich, zweistufige manuelle SOL-Auszahlung (nur wenn auf dem Server ausdrücklich eingeschaltet), dauerhaft gespeicherte Handels-/Auszahlungsjournale ohne Abschneiden ungeklärter Transaktionen. Externe Jupiter-Programme und dynamische Address Lookup Tables sind ohne unabhängige Sicherheitsprüfung gesperrt. Keine echte Produktionsfreigabe.
 
 ## Ohne Grok und ohne externe Sprachmodell-API
 
@@ -61,7 +63,7 @@ Vollständige Erklärung: [MEME-LIVE-READINESS-DE.md](MEME-LIVE-READINESS-DE.md)
 
 ## Android Build
 GitHub Actions -> **MemePulse AI - Android APK** -> neuester erfolgreicher Lauf auf
-**feature/memepulse-v08-meme-live-hardening** -> **Artifacts** -> MemePulseAI-Android-v0.8-debug-APK.
+**feature/memepulse-v09-readiness** -> **Artifacts** -> MemePulseAI-Android-v0.9-debug-APK.
 
 Lokal (Android SDK 35, Gradle 8.12, JDK 17):
 
