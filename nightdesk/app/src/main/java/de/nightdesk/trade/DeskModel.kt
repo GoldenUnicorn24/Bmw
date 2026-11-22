@@ -228,15 +228,20 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
                             val average = it.basis.divide(it.quantity, precision)
                             quote.bid <= average * "0.97".decimal() || quote.bid >= average * "1.06".decimal()
                         } ?: false
-                        if (botBars[key] != bars.last().time && (buy || (managed > zero && (reading.direction < 0 || exit)))) {
+                        val newCandle = botBars[key] != bars.last().time
+                        val protectiveExit = managed > zero && exit
+                        if ((newCandle && (buy || (managed > zero && reading.direction < 0))) || protectiveExit) {
                             val qty = if (buy) {
                                 require(state.portfolio.holdings.size < 3 && reading.atr > 0) { "Positionslimit erreicht" }
-                                val riskDistance = maxOf((2 * reading.atr).toBigDecimal(), quote.ask * "0.03".decimal())
-                                minOf((equity * "0.01".decimal()).divide(riskDistance, precision),
-                                    (state.portfolio.cash * "0.30".decimal()).divide(quote.ask, precision))
-                                    .setScale(market.quantityDecimals, RoundingMode.DOWN)
+                                val report = riskReport(market, quote, bars, equity, state.portfolio.cash)
+                                checkNotNull(report.quantity) { report.reason }
                             } else managed
-                            val id = UUID.nameUUIDFromBytes("$key:${bars.last().time}".toByteArray(StandardCharsets.UTF_8)).toString()
+                            // A stop/take-profit exit may occur in the same 15-minute candle as an entry.
+                            // Include the side and remaining position to prevent replaying the buy fill.
+                            val event = if (buy) "entry" else if (protectiveExit) "guard" else "exit"
+                            val id = UUID.nameUUIDFromBytes(
+                                "$key:${bars.last().time}:$event:${if (buy) "" else managed.toPlainString()}"
+                                    .toByteArray(StandardCharsets.UTF_8)).toString()
                             val draft = preview(settings.epoch, market, buy, qty, quote).copy(id = id)
                             broker.execute(draft, quote, botStrategy.label)
                             botBars[key] = bars.last().time
