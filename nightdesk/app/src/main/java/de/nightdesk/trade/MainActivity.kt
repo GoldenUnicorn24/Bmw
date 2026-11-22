@@ -81,6 +81,7 @@ private fun Desk(model: DeskModel) {
     val banner by model.banner.collectAsStateWithLifecycle()
     val connection by model.markets.status.collectAsStateWithLifecycle()
     val backend by model.backendStatus.collectAsStateWithLifecycle()
+    val backendState by model.backendState.collectAsStateWithLifecycle()
     Scaffold(
         containerColor = Ink,
         topBar = {
@@ -97,6 +98,11 @@ private fun Desk(model: DeskModel) {
                 }
                 Text(if (live) backend else connection, color = Muted, style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(top = 5.dp, bottom = 10.dp))
+                val server = backendState
+                if (!live && server?.optString("bot_mode") == "live") {
+                    Text("Separater Echtgeld-Serverbot · ${server.optString("bot_status")}", color = Amber,
+                        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 8.dp))
+                }
                 HorizontalDivider(color = Borders)
                 if (banner.isNotBlank()) {
                     Text(banner, color = Amber, modifier = Modifier.padding(vertical = 10.dp),
@@ -246,7 +252,8 @@ private fun Dashboard(model: DeskModel, live: Boolean) {
     Section("Handelsstatus") {
         Metric("Verfügbar", eur(paper.portfolio.cash))
         Metric("Papierbot", if (bot) "Läuft in der App" else "Pausiert")
-        Metric("Serverbot", state?.optString("bot_status").orEmpty().ifBlank { "Unbestätigt" })
+        Metric(if (state?.optString("bot_mode") == "live") "Echtgeld-Serverbot" else "Papier-Serverbot",
+            state?.optString("bot_status").orEmpty().ifBlank { "Unbestätigt" })
     }
     Section("Virtuelle Positionen") {
         if (paper.portfolio.holdings.isEmpty()) Text("Keine offenen Positionen", color = Muted)
