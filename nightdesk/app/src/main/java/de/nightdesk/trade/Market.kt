@@ -27,7 +27,7 @@ internal fun JSONObject.decimal(name: String) = getString(name).decimal()
 
 internal data class PairInfo(
     val symbol: String, val apiId: String, val quantityDecimals: Int,
-    val minimum: BigDecimal, val minCost: BigDecimal, val restKey: String = apiId
+    val minimum: BigDecimal, val minCost: BigDecimal, val restKey: String = apiId, val base: String = ""
 )
 
 internal data class Quote(
@@ -78,7 +78,7 @@ internal class Markets {
             .filter { (_, it) -> it.optString("wsname").endsWith("/EUR") && it.optString("status") == "online" }
             .map { (key, it) ->
                 PairInfo(it.getString("wsname").replace("XBT/", "BTC/").replace("XDG/", "DOGE/"), it.getString("altname"),
-                    it.getInt("lot_decimals"), it.decimal("ordermin"), it.decimal("costmin"), key)
+                    it.getInt("lot_decimals"), it.decimal("ordermin"), it.decimal("costmin"), key, it.getString("base"))
             }.distinctBy { it.symbol }.sortedBy { it.symbol }.toList()
         check(pairs.value.isNotEmpty()) { "Keine aktiven EUR-Paare verfügbar" }
     }
