@@ -435,6 +435,9 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
     val address by model.savedAddress.collectAsStateWithLifecycle()
     val pulse by model.pulse.collectAsStateWithLifecycle()
     val pulseStatus by model.pulseStatus.collectAsStateWithLifecycle()
+    val dex by model.dexResult.collectAsStateWithLifecycle()
+    val dexStatus by model.dexStatus.collectAsStateWithLifecycle()
+    var dexMint by rememberSaveable { mutableStateOf("") }
     val krakenConnected by model.krakenConnected.collectAsStateWithLifecycle()
     val quotes by model.quotes.collectAsStateWithLifecycle()
     val candles by model.chart.collectAsStateWithLifecycle()
@@ -479,9 +482,35 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
             Metric("Ausgewertete Trades", pulse?.observedTrades?.toString() ?: "—")
         }
         OutlinedButton(onClick = model::analyzePulse) { Text("Kraken-Analyse aktualisieren") }
-        Text("LP AUDITOR / HOLDER MAP / DEX-SNIPER: Mit einem Kraken-Schlüssel nicht verfügbar. " +
-            "Nur tatsächlich auf Kraken gelistete Paare können hier gehandelt werden.",
+        Text("Wale sind hier große Börsentrades, keine identifizierten Wallets. Der DEX-Scanner darunter nutzt getrennte öffentliche On-Chain-Daten.",
             color = Amber, style = MaterialTheme.typography.bodySmall)
+    }
+    Section("DEX SCOUT · Solana") {
+        Text("LP-Liquidität, Mint-Rechte, Freeze-Rechte und Top-Token-Konten. " +
+            "Benötigt keinen API-Key: öffentliche DEX Screener- und Solana-RPC-Abfragen.",
+            color = Muted, style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(dexMint, { dexMint = it }, label = { Text("Solana Mint-Adresse") },
+            singleLine = true, modifier = Modifier.fillMaxWidth())
+        Button(onClick = { model.scanDex(dexMint) }, enabled = dexMint.length in 32..44) {
+            Text("Tokenrisiken prüfen")
+        }
+        Text(dexStatus, color = Muted, style = MaterialTheme.typography.bodySmall)
+        dex?.let { data ->
+            Metric("Token / DEX", data.poolName + " · " + data.dex)
+            Metric("LP-Liquidität (USD)", data.liquidityUsd.stripTrailingZeros().toPlainString())
+            Metric("24h DEX-Volumen (USD)", data.volume24hUsd.stripTrailingZeros().toPlainString())
+            Metric("24h Kursveränderung", data.priceChange24h?.let {
+                String.format(Locale.GERMANY, "%+.2f %%", it)
+            } ?: "—")
+            Metric("DEX Käufe / Verkäufe (24h)", "${data.buyTransactions} / ${data.sellTransactions}")
+            Metric("Top 10 Token-Konten", data.top10AccountsShare?.let { pct(it) } ?: "—")
+            Metric("Weitere Token prägen?", data.mintAuthority?.let { if (it) "Ja" else "Nein" } ?: "Unbekannt")
+            Metric("Token einfrierbar?", data.freezeAuthority?.let { if (it) "Ja" else "Nein" } ?: "Unbekannt")
+            Metric("LP-Sperre verifiziert?", "Nein · Daten fehlen")
+            Text("Top-Token-Konten sind keine eindeutigen Wallet-Inhaber. Ein hoher Anteil kann auch LP-Verwahrung sein. " +
+                "DEX-Sniping und Kauf über Kraken sind nur bei separat gelistetem Kraken-Spotpaar möglich.",
+                color = Amber, style = MaterialTheme.typography.bodySmall)
+        }
     }
     Section("Bot · $selected") {
         Text("Regelbasierte Signale", color = Mint, style = MaterialTheme.typography.labelMedium)
