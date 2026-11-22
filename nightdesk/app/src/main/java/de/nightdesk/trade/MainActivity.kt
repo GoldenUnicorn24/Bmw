@@ -597,32 +597,60 @@ private fun SettingsScreen(model: DeskModel, live: Boolean) {
     val savedAddress by model.savedAddress.collectAsStateWithLifecycle()
     val backendStatus by model.backendStatus.collectAsStateWithLifecycle()
     val state by model.backendState.collectAsStateWithLifecycle()
+    val krakenConnected by model.krakenConnected.collectAsStateWithLifecycle()
+    val krakenStatus by model.krakenStatus.collectAsStateWithLifecycle()
+    val krakenBalances by model.liveBalances.collectAsStateWithLifecycle()
     val busy by model.busy.collectAsStateWithLifecycle()
     var capital by rememberSaveable { mutableStateOf("1000") }
     var address by rememberSaveable(savedAddress) { mutableStateOf(savedAddress) }
-    var token by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
+    var apiSecret by remember { mutableStateOf("") }
     var confirmReset by remember { mutableStateOf(false) }
     val notify by model.notify.collectAsStateWithLifecycle()
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         model.setNotices(it)
     }
     Section("Handelsmodus") {
-        Text(if (live) "Echtgeld · Kraken" else "Papier · Simulation", color = if (live) Amber else Mint)
-        if (!BuildConfig.LIVE_ENABLED) Text("Installierbarer Papier-Testbuild. Echtgeld ist gesperrt.", color = Muted)
-        else {
-            Button(onClick = model::usePaper) { Text("Papiermodus") }
-            if (state?.optBoolean("live_enabled") == true) {
-                OutlinedButton(onClick = model::useLive, enabled = !busy && !live) { Text("Echtgeldübersicht öffnen") }
-                OutlinedButton(onClick = { model.disableLive() }, enabled = !busy) { Text("Echtgeld serverseitig sperren") }
-            } else {
-                OutlinedButton(onClick = model::prepareLive, enabled = state != null && !busy) { Text("1 · Kraken-Zugriff prüfen") }
-                SecretField(code, { code = it }, "Freigabecode vom Server")
-                Button(onClick = { model.confirmLive(code); code = "" }, enabled = code.isNotBlank() && !busy) {
-                    Text("2 · Echtgeld freischalten")
-                }
+        Text(if (live) "Echtgeld · Kraken Direct" else "Papier · Simulation",
+            color = if (live) Amber else Mint)
+        Button(onClick = model::usePaper) { Text("Papiermodus") }
+        if (BuildConfig.LIVE_ENABLED && krakenConnected) {
+            if (!live) OutlinedButton(onClick = model::useLive, enabled = !busy) {
+                Text("Kraken-Echtgeldübersicht öffnen")
+            } else OutlinedButton(onClick = model::disableLive) { Text("Echtgeldansicht verlassen") }
+        } else if (!BuildConfig.LIVE_ENABLED) {
+            Text("Papier-Testbuild: Kontoabfrage möglich, Echtgeldorders gesperrt. " +
+                "Für Echtgeld brauchst du eine privat signierte Release-APK.", color = Amber)
+        }
+    }
+    Section("Kraken · direkte API-Verbindung") {
+        Metric("Verbindung", krakenStatus)
+        Text("Kein Server und kein zusätzliches Konto nötig: Nur Kraken API-Key und API-Secret. " +
+            "Die verschlüsselten Schlüssel bleiben auf deinem Gerät und werden ausschließlich für Kraken-Anfragen verwendet.",
+            color = Muted, style = MaterialTheme.typography.bodySmall)
+        if (!krakenConnected) {
+            SecretField(apiKey, { apiKey = it }, "Kraken API-Key")
+            SecretField(apiSecret, { apiSecret = it }, "Kraken API-Secret")
+            Button(onClick = {
+                model.connectKraken(apiKey, apiSecret)
+                apiKey = ""
+                apiSecret = ""
+            }, enabled = !busy && apiKey.isNotBlank() && apiSecret.isNotBlank()) {
+                Text("Kraken-Verbindung prüfen und speichern")
+            }
+        } else {
+            val balance = krakenBalances
+            Metric("EUR-Guthaben", balance?.decimalOrNull("EUR")?.let { eur(it) } ?: "—")
+            OutlinedButton(onClick = model::disconnectKraken, enabled = !busy) {
+                Text("Kraken-Schlüssel auf Gerät entfernen")
+            }
+            OutlinedButton(onClick = model::acknowledgeUncertain, enabled = !busy) {
+                Text("Ungeklärte Order nach Kraken-Pro-Prüfung bestätigen")
             }
         }
+        Text("Bei Kraken nur Query Funds, Open Orders und gegebenenfalls Create/Cancel Orders erlauben. " +
+            "Niemals Withdrawal- oder Transfer-Berechtigungen geben.",
+            color = Amber, style = MaterialTheme.typography.bodySmall)
     }
     Section("Papierkonto") {
         Metric("Virtuelles Startkapital", eur(account.account?.initial?.decimal()))
@@ -633,26 +661,10 @@ private fun SettingsScreen(model: DeskModel, live: Boolean) {
             confirmButton = { TextButton(onClick = { confirmReset = false; model.reset(capital) }) { Text("Zurücksetzen") } },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Abbrechen") } })
     }
-    Section("Backend · HTTPS") {
-        Text(backendStatus, color = Muted)
-        OutlinedTextField(address, { address = it }, label = { Text("HTTPS-Adresse") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-        SecretField(token, { token = it }, "Zugriffstoken")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { model.connect(address, token); token = "" }, enabled = !busy && token.isNotBlank()) { Text("Verbinden") }
-            if (savedAddress.isNotBlank()) OutlinedButton(onClick = model::disconnect) { Text("Trennen") }
-        }
-    }
+
     Section("Risiko und Datenschutz") {
-        val risk = state?.optJSONObject("risk")
-        if (live && risk != null) {
-            Metric("Server · Positionsrisiko", pct(risk.getString("per_trade").toDouble()))
-            Metric("Server · Tagesverlust", pct(risk.getString("daily_loss").toDouble()))
-            Metric("Server · Drawdown", pct(risk.getString("drawdown").toDouble()))
-            Metric("Server · Positionslimit", risk.getString("max_positions"))
-            Metric("Server · Orderlimit", eur(risk.decimalOrNull("max_order_eur")))
-            Metric("Server · Tageskaufgrenze", eur(risk.decimalOrNull("max_daily_eur")))
-        }
+        Metric("Direkte Kraken-Marktorder", "max. 250 €")
+        Metric("Live-Bot ohne Server", "nicht aktiviert")
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Benachrichtigungen für Papierausführungen", modifier = Modifier.weight(1f))
             Switch(checked = notify, onCheckedChange = {
@@ -665,7 +677,9 @@ private fun SettingsScreen(model: DeskModel, live: Boolean) {
         Metric("Papierbot · Tagesverlust", "3 %")
         Metric("Papierbot · Drawdown", "10 %")
         Metric("Papierbot · Positionslimit", "3")
-        Text("Papierdaten bleiben lokal. Kraken erhält öffentliche Kursanfragen. Das konfigurierte Backend erhält dein Zugriffstoken und die dort ausgelösten Handelsanfragen.", color = Muted)
+        Text("Papierdaten bleiben lokal. Kraken erhält öffentliche Kursanfragen und authentifizierte Anfragen für dein Konto. " +
+            "NightDesk übermittelt keinen API-Schlüssel an Drittserver. Live-Orders werden nicht automatisch im Hintergrund fortgesetzt.",
+            color = Muted)
     }
 }
 
