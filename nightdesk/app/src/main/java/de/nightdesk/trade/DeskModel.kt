@@ -101,6 +101,21 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
         }
         // No private backend is required for the direct Kraken workflow.
         // Deliberately do not auto-connect a legacy server or start a live bot.
+        viewModelScope.launch {
+            while (true) {
+                if (live.value && krakenConnected.value) {
+                    try {
+                        reloadLive()
+                        krakenStatus.value = "Kraken Direct · Kontodaten aktuell"
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        krakenStatus.value = "Kraken-Verbindung unterbrochen · Kontodaten nicht aktuell"
+                    }
+                }
+                delay(25_000)
+            }
+        }
     }
 
     fun choose(symbol: String) {
@@ -227,6 +242,12 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
     fun analyzePulse() = action {
         pulse.value = markets.pulse(pair())
         pulseStatus.value = "Kraken-Orderbuch und Trades gelesen"
+    }
+
+    fun refreshKraken() = action {
+        check(krakenConnected.value) { "Kraken noch nicht verbunden" }
+        reloadLive()
+        krakenStatus.value = "Kraken Direct · Kontostand aktualisiert"
     }
 
     fun connectKraken(key: String, secret: String) = action {
