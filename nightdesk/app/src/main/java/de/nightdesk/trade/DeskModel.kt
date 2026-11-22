@@ -36,6 +36,9 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
     val krakenStatus = MutableStateFlow(if (krakenKeys.configured) "API-Schlüssel gespeichert" else "Nicht verbunden")
     val pulse = MutableStateFlow<KrakenPulse?>(null)
     val pulseStatus = MutableStateFlow("Noch keine Kraken-Orderbuchanalyse")
+    private val dex = DexScout(markets.http)
+    val dexResult = MutableStateFlow<DexReport?>(null)
+    val dexStatus = MutableStateFlow("Noch kein Solana-Token geprüft")
     private val credentials = BackendCredentials(app)
     private val backend = Backend(credentials, markets.http)
     val savedAddress = MutableStateFlow(credentials.address)
@@ -105,6 +108,8 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
         activePreview.value = null
         livePreview.value = null
         research.value = emptyList()
+        pulse.value = null
+        pulseStatus.value = "Kraken-Markt gewechselt"
         chart.value = emptyList()
         chartTask?.cancel()
         chartTask = viewModelScope.launch {
@@ -210,6 +215,13 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
             banner.value = "Papierorder simuliert"
             notices.fill("Papierorder simuliert", draft.pair.symbol)
         }
+    }
+
+    fun scanDex(mint: String) = action {
+        dexResult.value = null
+        val report = dex.scan(mint)
+        dexResult.value = report
+        dexStatus.value = "DEX- und Solana-Daten geladen · nur Analyse, kein DEX-Handel"
     }
 
     fun analyzePulse() = action {
