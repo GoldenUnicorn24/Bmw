@@ -28,7 +28,7 @@ internal fun riskReport(
     if (quote.volumeEur < "20000".decimal()) return RiskReport("24h-Liquidität unter 20.000 € – Kauf gesperrt")
     if (candles.size < 200) return RiskReport("Mindestens 200 abgeschlossene 15m-Kerzen erforderlich")
     val age = now.epochSecond - candles.last().time
-    if (age !in 890..1900) return RiskReport("Kerzen veraltet oder nicht abgeschlossen")
+    if (age !in 890L..1900L) return RiskReport("Kerzen veraltet oder nicht abgeschlossen")
     if (candles.takeLast(15).zipWithNext().any { (a, b) ->
             b.time <= a.time || b.low <= zero || b.high < b.low || a.close <= zero
         }) return RiskReport("Ungültige Kraken-Kerzen")
