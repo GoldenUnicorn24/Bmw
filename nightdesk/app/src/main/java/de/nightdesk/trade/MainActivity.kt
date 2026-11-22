@@ -670,6 +670,9 @@ private fun SettingsScreen(model: DeskModel, live: Boolean) {
         } else {
             val balance = krakenBalances
             Metric("EUR-Guthaben", balance?.decimalOrNull("EUR")?.let { eur(it) } ?: "—")
+            OutlinedButton(onClick = model::refreshKraken, enabled = !busy) {
+                Text("Kraken-Kontostand aktualisieren")
+            }
             OutlinedButton(onClick = model::disconnectKraken, enabled = !busy) {
                 Text("Kraken-Schlüssel auf Gerät entfernen")
             }
