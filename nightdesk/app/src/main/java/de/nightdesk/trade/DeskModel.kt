@@ -36,6 +36,9 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
     val krakenStatus = MutableStateFlow(if (krakenKeys.configured) "API-Schlüssel gespeichert" else "Nicht verbunden")
     val pulse = MutableStateFlow<KrakenPulse?>(null)
     val pulseStatus = MutableStateFlow("Noch keine Kraken-Orderbuchanalyse")
+    private val listingPrefs = app.getSharedPreferences("nightdesk.kraken.listing-snapshot", 0)
+    val listingStatus = MutableStateFlow("Kraken-Listings noch nicht verglichen")
+    val newListings = MutableStateFlow<List<String>>(emptyList())
     private val dex = DexScout(markets.http)
     val dexResult = MutableStateFlow<DexReport?>(null)
     val dexStatus = MutableStateFlow("Noch kein Solana-Token geprüft")
@@ -230,6 +233,17 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
             banner.value = "Papierorder simuliert"
             notices.fill("Papierorder simuliert", draft.pair.symbol)
         }
+    }
+
+    fun scanKrakenListings() = action {
+        markets.load()
+        val current = pairs.value.map { it.symbol }.toSet()
+        val previous = listingPrefs.getStringSet("known", null)?.toSet()
+        newListings.value = if (previous == null) emptyList() else (current - previous).sorted()
+        check(listingPrefs.edit().putStringSet("known", current).commit())
+        listingStatus.value = if (previous == null) "Erste Kraken-Referenz gespeichert. Nächster Vergleich erkennt neue EUR-Paare."
+            else if (newListings.value.isEmpty()) "Keine neuen Kraken-EUR-Paare seit dem letzten Vergleich"
+            else "Neue Kraken-EUR-Paare seit dem letzten Vergleich: " + newListings.value.size
     }
 
     fun scanDex(mint: String) = action {
