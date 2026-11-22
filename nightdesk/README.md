@@ -23,14 +23,14 @@ Der öffentliche GitHub-Actions-Testbuild ist für die Echtgeldfunktion bewusst 
 ---
 
 
-NightDesk ist eine native Android-App für Kraken-Spotmärkte mit EUR-Kurswährung. Das lokale Papierkonto öffnet mit 1.000 virtuellen Euro und erhält Kursdaten direkt von Kraken. Der separat installierbare Python-Dienst führt den Serverbot aus und verwaltet die Verbindung zum echten Börsenkonto. Die App zeigt den aktiven Handelsmodus oben auf jeder Seite.
+NightDesk ist eine native Android-App für Kraken-Spotmärkte mit EUR-Kurswährung. Das lokale Papierkonto öffnet mit 1.000 virtuellen Euro und erhält Kursdaten direkt von Kraken. Für den Kraken-Direct-Modus ist **kein eigener Python-Server nötig**. Ein älteres, optionales Backend ist im Repository weiterhin vorhanden, wird für die direkte App-Verbindung aber nicht benötigt. Die App zeigt den aktiven Handelsmodus oben auf jeder Seite.
 
 ## APK installieren
 
-1. Öffne [NightDesk Trade 2.0 auf GitHub](https://github.com/GoldenUnicorn24/Bmw/releases/tag/nightdesk-v2.0) oder lade das Artefakt `NightDesk-Trade-2.0-Papier-Testbuild` aus dem [NightDesk-Workflow](https://github.com/GoldenUnicorn24/Bmw/actions/workflows/nightdesk-android.yml).
-2. Bei einem Workflow-Artefakt entpacke zuerst das ZIP. Öffne `NightDesk-Trade-2.0.apk` auf dem Android-Gerät. Android kann einmalig die Erlaubnis für die verwendete Installationsquelle verlangen.
+1. Öffne den [NightDesk-Workflow](https://github.com/GoldenUnicorn24/Bmw/actions/workflows/nightdesk-android.yml) und lade das Artefakt `NightDesk-Trade-2.1-Papier-Testbuild`.
+2. Bei einem Workflow-Artefakt entpacke zuerst das ZIP. Öffne `NightDesk-Trade-2.1.apk` auf dem Android-Gerät. Android kann einmalig die Erlaubnis für die verwendete Installationsquelle verlangen.
 3. Starte NightDesk. Der Papier-Testbuild verwendet die Anwendungs-ID `de.nightdesk.trade.paper`. Die mit einem privaten Release-Schlüssel signierte Variante verwendet `de.nightdesk.trade` und bekommt ein eigenes lokales Papierkonto.
-4. Alternativ installierst du die APK über `adb install -r NightDesk-Trade-2.0.apk`. Die App unterstützt Android ab API 26, kompiliert gegen API 35 und enthält native Bibliotheken für `arm64-v8a` und Emulatoren. Der Samsung Galaxy S26 Ultra benötigt eine separate Geräteabnahme.
+4. Alternativ installierst du die APK über `adb install -r NightDesk-Trade-2.1.apk`. Die App unterstützt Android ab API 26, kompiliert gegen API 35 und enthält native Bibliotheken für `arm64-v8a` und Emulatoren. Der Samsung Galaxy S26 Ultra benötigt eine separate Geräteabnahme.
 
 Der Papier-Testbuild hat einen Debugsignaturschlüssel und sperrt sämtliche Kraken-Echtgeldaktionen in der App. Android-Updates benötigen dieselbe Anwendungs-ID und denselben Signaturschlüssel. GitHub-gebaute Papier-Testversionen können einen anderen Debugschlüssel als lokale Builds haben.
 
