@@ -105,9 +105,11 @@ internal class DexScout(http: OkHttpClient) {
             check(response.isSuccessful) { "DEX Screener HTTP " + response.code }
             JSONArray(response.body?.string().orEmpty())
         }
-        val account = rpc("getAccountInfo", mint, JSONObject().put("encoding", "jsonParsed"))
-        val supply = rpc("getTokenSupply", mint)
-        val largest = rpc("getTokenLargestAccounts", mint)
+        // Public Solana RPC is rate-limited; never replace missing chain facts with guesses.
+        val account = runCatching { rpc("getAccountInfo", mint, JSONObject().put("encoding", "jsonParsed")) }
+            .getOrDefault(JSONObject())
+        val supply = runCatching { rpc("getTokenSupply", mint) }.getOrDefault(JSONObject())
+        val largest = runCatching { rpc("getTokenLargestAccounts", mint) }.getOrDefault(JSONObject())
         parseDexReport(mint, pairs, account, supply, largest)
     }
 }
