@@ -1,0 +1,10 @@
+{$NIGHTDESK_DOMAIN} {
+	tls {
+		protocols tls1.2 tls1.3
+	}
+	header Strict-Transport-Security "max-age=31536000"
+	request_body {
+		max_size 4096
+	}
+	reverse_proxy backend:8000
+}
