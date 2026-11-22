@@ -437,6 +437,8 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
     val pulseStatus by model.pulseStatus.collectAsStateWithLifecycle()
     val dex by model.dexResult.collectAsStateWithLifecycle()
     val dexStatus by model.dexStatus.collectAsStateWithLifecycle()
+    val listingStatus by model.listingStatus.collectAsStateWithLifecycle()
+    val newListings by model.newListings.collectAsStateWithLifecycle()
     var dexMint by rememberSaveable { mutableStateOf("") }
     val krakenConnected by model.krakenConnected.collectAsStateWithLifecycle()
     val quotes by model.quotes.collectAsStateWithLifecycle()
@@ -484,6 +486,14 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
         OutlinedButton(onClick = model::analyzePulse) { Text("Kraken-Analyse aktualisieren") }
         Text("Wale sind hier große Börsentrades, keine identifizierten Wallets. Der DEX-Scanner darunter nutzt getrennte öffentliche On-Chain-Daten.",
             color = Amber, style = MaterialTheme.typography.bodySmall)
+    }
+    Section("KRAKEN SNIPER SCOUT · Neue Börsenpaare") {
+        Text("Beobachtung neuer Kraken-EUR-Paare seit dem letzten lokalen Vergleich. " +
+            "Keine automatischen Käufe und kein DEX-Token-Sniping.", color = Muted,
+            style = MaterialTheme.typography.bodySmall)
+        Text(listingStatus, color = Amber, style = MaterialTheme.typography.bodySmall)
+        for (symbol in newListings.take(20)) Metric("Neues Paar", symbol)
+        OutlinedButton(onClick = model::scanKrakenListings) { Text("Kraken-Listings abgleichen") }
     }
     Section("DEX SCOUT · Solana") {
         Text("LP-Liquidität, Mint-Rechte, Freeze-Rechte und Top-Token-Konten. " +
