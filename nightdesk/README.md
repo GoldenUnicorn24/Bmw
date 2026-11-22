@@ -1,4 +1,25 @@
-# NightDesk Trade 2.0
+# NightDesk Trade 2.1 — Kraken Direct
+
+## Ohne eigenen Server: nur Kraken API-Key + Secret
+
+1. APK öffnen → **Einstellungen → Kraken · direkte API-Verbindung**.
+2. Kraken-API-Key und **API-Secret** in der App eingeben. NightDesk sendet eine signierte Anfrage an `https://api.kraken.com/0/private/Balance` und speichert die Zugangsdaten erst nach erfolgreicher Antwort. Die lokale Speicherung verwendet Android Keystore AES-GCM. Kein NightDesk-Backend, keine zusätzliche Domain und kein separates Zugangstoken erforderlich.
+3. Für Kontostand und Prüfung sind mindestens **Query funds** und **Query open orders & trades** erforderlich; für manuelle Echtgeldorders auch **Create & modify orders** und **Cancel & close orders**. **Niemals Withdraw, Deposit, Transfer, Earn** oder andere Kontoübertragungsrechte aktivieren. Bei API-spezifischer 2FA kann eine gesonderte OTP-Behandlung nötig werden; die direkte Version unterstützt keine API-OTP-Eingabe.
+4. Auf dem Papier-Testbuild kannst du die Verbindung und Kontostandsabfrage testen; **Echtgeldorders sind dort gesperrt**. Für Echtgeld benötigt NightDesk einen privat signierten Release-Build (siehe unten). Damit kannst du in **Einstellungen** zur Echtgeldansicht wechseln und unter **Trading** eine Kraken-Marktorder mit Vorschau und zusätzlicher Bestätigung abschicken.
+5. Fällt die Verbindung während einer Live-Order aus, blockiert die App neue Echtgeldorders. Prüfe in **Kraken Pro** offene **und** abgeschlossene Orders und bestätige erst dann die manuelle Klärung in den Einstellungen. Es erfolgt **niemals** ein ungesicherter automatischer Wiederholungsversuch.
+
+**Handelsgrenzen:** Spot-EUR-Paare, maximale manuelle Ordergröße 250 €, nur Marktorders, Prüfung von Kraken-Mindestmenge, Spread ≤ 1 %, 24h-Volumen ≥ 20.000 €, bestes sichtbares Geld-/Briefvolumen, Preisverschlechterung gegenüber Vorschau und verfügbarem Guthaben. Gebühren und Ausführung können tatsächlich von der Schätzung abweichen. Alle Live-Ausführungen benötigen eine aktive manuelle Bestätigung; **kein autonomer Live-Bot** wird nur durch Hinterlegen der Schlüssel aktiviert. Eine Android-App bietet beim Schließen/Absturz keine garantierte Stop-Loss-Überwachung.
+
+## Meme Radar, Whale Watch und Handelsgrenzen
+
+Die App nutzt für den Scanner ausschließlich echte Kraken-Daten: `AssetPairs` (handelbare EUR-Paare), `Depth` (25 beste Orderbuchstufen), `Trades` (historische Kraken-Ausführungen) und `Ticker/OHLC` (Volatilität, Liquidität und Kurse). Der Scanner zeigt Orderbuchvolumen, aggressives Kaufverhältnis und große beobachtete Trades. **Dies sind keine On-Chain-Wale oder Wallet-Bestände**. Keine Social-Sentiment-Daten, keine Solana-Mint-/Freeze-Rechte und keine DEX-LP-Sperren werden vorgetäuscht. Token ohne Kraken-Listing können nicht mit dem Kraken-Key gehandelt werden; ein DEX-Sniper erfordert grundsätzlich eine separate Wallet, Infrastruktur und on-chain Prüfungen.
+
+## Privater Release-Build
+
+Der öffentliche GitHub-Actions-Testbuild ist für die Echtgeldfunktion bewusst gesperrt. Für die private Echtgeld-APK werden die vorhandenen vier GitHub Actions Secrets (`NIGHTDESK_KEYSTORE_BASE64`, `NIGHTDESK_STORE_PASSWORD`, `NIGHTDESK_KEY_ALIAS`, `NIGHTDESK_KEY_PASSWORD`) gebraucht. Damit ist keine zweite App-Verbindung oder Server-Hosting nötig, aber ein sicherer, dauerhaft kontrollierter Release-Signaturschlüssel. Nicht denselben Debug-Schlüssel eines öffentlichen GitHub-Runners zur Echtgeldfreigabe verwenden. Der reale Handelsweg ist mangels Nutzer-API-Key und echtem Echtgeldtest nicht vollständig End-to-End abgenommen.
+
+---
+
 
 NightDesk ist eine native Android-App für Kraken-Spotmärkte mit EUR-Kurswährung. Das lokale Papierkonto öffnet mit 1.000 virtuellen Euro und erhält Kursdaten direkt von Kraken. Der separat installierbare Python-Dienst führt den Serverbot aus und verwaltet die Verbindung zum echten Börsenkonto. Die App zeigt den aktiven Handelsmodus oben auf jeder Seite.
 
