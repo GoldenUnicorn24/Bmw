@@ -3,7 +3,7 @@ package de.nightdesk.trade
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.util.Base64
+import java.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -40,10 +40,10 @@ internal class KrakenKeys(context: Context) {
     private fun encrypt(value: String): String {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, aes())
-        return Base64.encodeToString(cipher.iv + cipher.doFinal(value.toByteArray()), Base64.NO_WRAP)
+        return Base64.getEncoder().encodeToString(cipher.iv + cipher.doFinal(value.toByteArray()))
     }
     private fun decrypt(value: String): String {
-        val data = Base64.decode(value, Base64.NO_WRAP)
+        val data = Base64.getDecoder().decode(value)
         require(data.size > 28) { "Beschädigte Kraken-Zugangsdaten" }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, aes(), GCMParameterSpec(128, data.copyOfRange(0, 12)))
@@ -51,7 +51,7 @@ internal class KrakenKeys(context: Context) {
     }
     fun store(key: String, secret: String) {
         require(key.trim().length in 20..256) { "API-Key ungültig" }
-        require(Base64.decode(secret.trim(), Base64.DEFAULT).size >= 32) { "API-Secret ungültig" }
+        require(Base64.getDecoder().decode(secret.trim()).size >= 32) { "API-Secret ungültig" }
         check(prefs.edit().putString("key", encrypt(key.trim()))
             .putString("secret", encrypt(secret.trim())).commit())
     }
@@ -63,6 +63,7 @@ internal class KrakenKeys(context: Context) {
         get() = prefs.getBoolean("uncertain", false)
         set(value) { check(prefs.edit().putBoolean("uncertain", value).commit()) }
     fun forget() { prefs.edit().remove("key").remove("secret").apply() }
+    fun acknowledgeUnknownAfterKrakenReview() { uncertainOrder = false }
 }
 
 internal object KrakenSignature {
@@ -70,8 +71,8 @@ internal object KrakenSignature {
         require(path.startsWith("/0/private/"))
         val sha = MessageDigest.getInstance("SHA-256").digest((nonce + form).toByteArray(Charsets.UTF_8))
         val hmac = Mac.getInstance("HmacSHA512")
-        hmac.init(SecretKeySpec(Base64.decode(secret, Base64.DEFAULT), "HmacSHA512"))
-        return Base64.encodeToString(hmac.doFinal(path.toByteArray(Charsets.UTF_8) + sha), Base64.NO_WRAP)
+        hmac.init(SecretKeySpec(Base64.getDecoder().decode(secret), "HmacSHA512"))
+        return Base64.getEncoder().encodeToString(hmac.doFinal(path.toByteArray(Charsets.UTF_8) + sha))
     }
 }
 
