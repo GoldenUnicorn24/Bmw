@@ -45,6 +45,8 @@ private interface PublicApi {
     @GET("0/public/AssetPairs") suspend fun pairs(): ResponseBody
     @GET("0/public/Ticker") suspend fun ticker(@Query("pair") pairs: String): ResponseBody
     @GET("0/public/OHLC") suspend fun candles(@Query("pair") pair: String, @Query("interval") interval: Int): ResponseBody
+    @GET("0/public/Depth") suspend fun depth(@Query("pair") pair: String, @Query("count") count: Int): ResponseBody
+    @GET("0/public/Trades") suspend fun trades(@Query("pair") pair: String): ResponseBody
 }
 
 internal data class Candle(val time: Long, val open: BigDecimal, val high: BigDecimal,
@@ -66,6 +68,9 @@ internal class Markets {
         check(root.getJSONArray("error").length() == 0) { "Kraken meldet einen Marktdatenfehler" }
         root.getJSONObject("result")
     }
+
+    suspend fun pulse(pair: PairInfo): KrakenPulse =
+        parseKrakenPulse(result(api.depth(pair.apiId, 25)), result(api.trades(pair.apiId)))
 
     suspend fun load() {
         val response = result(api.pairs())
