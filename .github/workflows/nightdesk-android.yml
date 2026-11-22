@@ -1,0 +1,146 @@
+name: NightDesk Trade Android
+
+on:
+  pull_request:
+    paths:
+      - 'nightdesk/**'
+      - '.github/workflows/nightdesk-android.yml'
+  push:
+    branches:
+      - main
+      - 'feature/nightdesk-trade-2.0'
+    tags:
+      - nightdesk-v2.0
+    paths:
+      - 'nightdesk/**'
+      - '.github/workflows/nightdesk-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nightdesk/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: nightdesk/backend/requirements*.txt
+      - run: python -m pip install -r requirements-test.txt
+      - run: python -m pytest -q
+
+  android:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: nightdesk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          cmdline-tools-version: '13114758'
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Test and build
+        run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Prepare paper APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/NightDesk-Trade-2.0.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify dist/NightDesk-Trade-2.0.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NightDesk-Trade-2.0-Papier-Testbuild
+          path: nightdesk/dist/NightDesk-Trade-2.0.apk
+          if-no-files-found: error
+      - name: Give the runner access to KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android startup smoke test
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          disable-animations: true
+          working-directory: nightdesk
+          script: gradle --no-daemon :app:connectedDebugAndroidTest
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/tags/nightdesk-v2.0'
+    needs: [android, test-backend]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: nightdesk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify release commit is part of main
+        run: git merge-base --is-ancestor HEAD origin/main
+      - uses: actions/download-artifact@v4
+        with:
+          name: NightDesk-Trade-2.0-Papier-Testbuild
+          path: nightdesk/dist
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          cmdline-tools-version: '13114758'
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: 'false'
+      - id: signing
+        name: Sign release when the complete signing set is configured
+        env:
+          NIGHTDESK_KEYSTORE_BASE64: ${{ secrets.NIGHTDESK_KEYSTORE_BASE64 }}
+          NIGHTDESK_STORE_PASSWORD: ${{ secrets.NIGHTDESK_STORE_PASSWORD }}
+          NIGHTDESK_KEY_ALIAS: ${{ secrets.NIGHTDESK_KEY_ALIAS }}
+          NIGHTDESK_KEY_PASSWORD: ${{ secrets.NIGHTDESK_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$NIGHTDESK_KEYSTORE_BASE64" || -z "$NIGHTDESK_STORE_PASSWORD" || -z "$NIGHTDESK_KEY_ALIAS" || -z "$NIGHTDESK_KEY_PASSWORD" ]]; then
+            echo 'prerelease=--prerelease' >> "$GITHUB_OUTPUT"
+            echo 'status=Papier-Testbuild · Echtgeld gesperrt' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          umask 077
+          export NIGHTDESK_KEYSTORE
+          NIGHTDESK_KEYSTORE="$(mktemp "$RUNNER_TEMP/nightdesk.XXXXXXXX.jks")"
+          trap 'rm -f "$NIGHTDESK_KEYSTORE"' EXIT
+          printf '%s' "$NIGHTDESK_KEYSTORE_BASE64" | base64 --decode > "$NIGHTDESK_KEYSTORE"
+          gradle --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk dist/NightDesk-Trade-2.0.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify dist/NightDesk-Trade-2.0.apk
+          echo 'status=Signierte Release-APK · Kraken-Echtgeld-End-to-End unbestätigt' >> "$GITHUB_OUTPUT"
+      - name: Publish NightDesk release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_STATUS: ${{ steps.signing.outputs.status }}
+          PRERELEASE: ${{ steps.signing.outputs.prerelease }}
+        run: |
+          gh release create nightdesk-v2.0 dist/NightDesk-Trade-2.0.apk --verify-tag --latest=false ${PRERELEASE:+--prerelease} \
+            --title "NightDesk Trade 2.0" --notes "$BUILD_STATUS"

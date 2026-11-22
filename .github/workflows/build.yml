@@ -1,6 +1,12 @@
 name: Build Android Debug APK
 on:
   push:
+    branches-ignore:
+      - feature/nightdesk-trade-2.0
+    paths-ignore:
+      - nightdesk/**
+      - .github/workflows/nightdesk-android.yml
+      - .github/workflows/build.yml
   workflow_dispatch:
 permissions:
   contents: write
@@ -39,6 +45,7 @@ jobs:
           name: executive-black-debug-apk
           path: ExecutiveBlack.apk
       - name: Publish dev-latest release
+        if: github.ref_type == 'branch' && github.ref_name != 'feature/nightdesk-trade-2.0'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
