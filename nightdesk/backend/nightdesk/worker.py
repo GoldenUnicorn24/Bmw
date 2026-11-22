@@ -103,7 +103,10 @@ class Worker:
             if mark_equity(conn, mode, equity, ex.config.daily_loss, ex.config.drawdown):
                 ex._pause(conn, "Tagesverlust oder Drawdown erreicht")
                 return
-        if already_traded or (not buy and not sell):
+        # Protective exits must run even after an entry in the same 15-minute candle.
+        # Ordinary strategy signals remain limited to one decision per candle.
+        protective_exit = bool(position and (stop_loss or take_profit))
+        if (already_traded and not protective_exit) or (not buy and not sell):
             return
         if buy:
             with ex.store.connection() as conn:
@@ -117,7 +120,10 @@ class Worker:
         qty = quantity_step(amount, pair.quantity_decimals)
         if qty < pair.minimum or qty * (quote.ask if buy else quote.bid) < pair.minimum_cost:
             raise ValueError("Dynamische Positionsgröße unter dem Kraken-Mindestwert")
-        order = {"id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nightdesk:" + candle_id)), "symbol": symbol,
+        # The side and current managed quantity make an in-candle stop distinct
+        # from an entry, while retaining deterministic IDs for retries.
+        episode = f":guard:{position.quantity}" if protective_exit else ":signal"
+        order = {"id": str(uuid.uuid5(uuid.NAMESPACE_URL, "nightdesk:" + candle_id + episode)), "symbol": symbol,
                  "side": "buy" if buy else "sell", "quantity": format(qty, "f"), "limit": None}
         with ex.store.write() as conn:
             ex._bot_allowed(mode, conn)

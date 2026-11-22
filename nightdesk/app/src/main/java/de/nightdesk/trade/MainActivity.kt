@@ -427,7 +427,36 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
     val local by model.localBot.collectAsStateWithLifecycle()
     val serverPaper by model.serverPaper.collectAsStateWithLifecycle()
     val address by model.savedAddress.collectAsStateWithLifecycle()
+    val quotes by model.quotes.collectAsStateWithLifecycle()
+    val candles by model.chart.collectAsStateWithLifecycle()
+    val pairs by model.pairs.collectAsStateWithLifecycle()
+    val paper by model.account.collectAsStateWithLifecycle()
     var code by remember { mutableStateOf("") }
+    LaunchedEffect(selected, pairs.isNotEmpty()) {
+        if (pairs.isNotEmpty() && candles.isEmpty()) model.choose(selected)
+    }
+    val quote = quotes[selected]
+    val risk = pairs.firstOrNull { it.symbol == selected }?.let { pair ->
+        riskReport(pair, quote, candles, if (live) null else paper.portfolio.value(quotes),
+            if (live) null else paper.portfolio.cash)
+    }
+    Section("MEME RADAR · Kraken Spot") {
+        Metric("Markt", selected)
+        Metric("Spread", quote?.takeIf { it.isCurrent() }?.let { pct(it.spread.toDouble()) } ?: "—")
+        Metric("24h-Volumen", quote?.takeIf { it.isCurrent() }?.let { eur(it.volumeEur) } ?: "—")
+        Metric("ATR / Kurs", risk?.atrPercent?.let { pct(it.toDouble()) } ?: "—")
+        if (!live) {
+            Metric("Risiko-Budget (1 %)", eur(risk?.riskBudgetEur))
+            Metric("RISK SIZER · Kaufmenge", risk?.quantity?.stripTrailingZeros()?.toPlainString() ?: "—")
+        }
+        Text(risk?.reason ?: "Kraken-EUR-Markt noch nicht geladen", color = Amber,
+            style = MaterialTheme.typography.bodySmall)
+        Metric("STOP GUARD", "−3 % vom Einstand")
+        Metric("PROFIT TAKER", "+6 % vom Einstand")
+        Text("Dies sind Bot-Überwachungsregeln, keine bei Kraken hinterlegten Stop-Orders. " +
+            "LP-Audit, Holder Map, Whale Watch und DEX-Sniping benötigen separate On-Chain-Daten " +
+            "und sind hier nicht verfügbar.", color = Muted, style = MaterialTheme.typography.bodySmall)
+    }
     Section("Bot · $selected") {
         Text("Regelbasierte Signale", color = Mint, style = MaterialTheme.typography.labelMedium)
         Strategy.entries.forEach { item ->
