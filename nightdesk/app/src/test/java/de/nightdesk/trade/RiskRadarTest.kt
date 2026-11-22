@@ -17,9 +17,9 @@ class RiskRadarTest {
     @Test fun calculatesVolatilityCappedAmountFromRealMarketInputs() {
         val report = riskReport(pair, quote, candles, "1000".decimal(), "1000".decimal(), now)
         assertEquals("Kraken-Spotprüfung bestanden · kein Kaufsignal", report.reason)
-        assertNotNull(report.quantity)
-        assertTrue(report.quantity!! > zero)
-        assertTrue(report.quantity * quote.ask <= "250".decimal())
+        val amount = requireNotNull(report.quantity)
+        assertTrue(amount > zero)
+        assertTrue(amount * quote.ask <= "250".decimal())
         assertEquals(0, report.riskBudgetEur!!.compareTo("10".decimal()))
         assertEquals(0, report.atrPercent!!.compareTo("0.04".decimal()))
     }
