@@ -80,7 +80,7 @@ private fun Desk(model: DeskModel) {
     val live by model.live.collectAsStateWithLifecycle()
     val banner by model.banner.collectAsStateWithLifecycle()
     val connection by model.markets.status.collectAsStateWithLifecycle()
-    val backend by model.backendStatus.collectAsStateWithLifecycle()
+    val krakenStatus by model.krakenStatus.collectAsStateWithLifecycle()
     val backendState by model.backendState.collectAsStateWithLifecycle()
     Scaffold(
         containerColor = Ink,
@@ -96,13 +96,9 @@ private fun Desk(model: DeskModel) {
                         Text(if (tab == "Einstellungen") "Zurück" else "Einstellungen")
                     }
                 }
-                Text(if (live) backend else connection, color = Muted, style = MaterialTheme.typography.labelSmall,
+                Text(if (live) krakenStatus else connection, color = Muted, style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(top = 5.dp, bottom = 10.dp))
-                val server = backendState
-                if (!live && server?.optString("bot_mode") == "live") {
-                    Text("Separater Echtgeld-Serverbot · ${server.optString("bot_status")}", color = Amber,
-                        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 8.dp))
-                }
+                // No remote server is needed for Kraken Direct.
                 HorizontalDivider(color = Borders)
                 if (banner.isNotBlank()) {
                     Text(banner, color = Amber, modifier = Modifier.padding(vertical = 10.dp),
@@ -230,11 +226,12 @@ private fun Dashboard(model: DeskModel, live: Boolean) {
                 Metric("Erfasster Einstand", eur(holding.decimal("basis")))
             }
         }
-        Section("Server-Überwachung") {
-            Metric("Automatik", state?.optString("bot_status").orEmpty().ifBlank { "Unbestätigt" })
-            Text(if (state?.optBoolean("worker_current") == true)
-                "Serverregeln werden überwacht. Börsenorders bleiben auf Kraken sichtbar."
-            else "Serverregeln nicht als aktiv bestätigt.", color = Amber)
+        Section("Kraken Direct") {
+            Metric("Verbindung", "API direkt über TLS")
+            Text("Guthaben und offene Orders stammen von Kraken. Portfolio-Wert nur bei aktuell bewertbaren EUR-Paaren.",
+                color = Muted, style = MaterialTheme.typography.bodySmall)
+            Text("Automatische Echtgeldorders sind ohne dauerhaft betriebenen Server nicht aktiviert.",
+                color = Amber, style = MaterialTheme.typography.bodySmall)
         }
         return
     }
@@ -252,8 +249,7 @@ private fun Dashboard(model: DeskModel, live: Boolean) {
     Section("Handelsstatus") {
         Metric("Verfügbar", eur(paper.portfolio.cash))
         Metric("Papierbot", if (bot) "Läuft in der App" else "Pausiert")
-        Metric(if (state?.optString("bot_mode") == "live") "Echtgeld-Serverbot" else "Papier-Serverbot",
-            state?.optString("bot_status").orEmpty().ifBlank { "Unbestätigt" })
+        Metric("Echtgeld", "Nur über direkte Kraken-API im signierten Release")
     }
     Section("Virtuelle Positionen") {
         if (paper.portfolio.holdings.isEmpty()) Text("Keine offenen Positionen", color = Muted)
@@ -351,6 +347,7 @@ private fun TradeScreen(model: DeskModel, live: Boolean) {
     val order by model.activePreview.collectAsStateWithLifecycle()
     val realOrder by model.livePreview.collectAsStateWithLifecycle()
     val liveOrders by model.liveOrders.collectAsStateWithLifecycle()
+    var confirmLiveOrder by remember { mutableStateOf(false) }
     var side by rememberSaveable { mutableStateOf(true) }
     var qty by rememberSaveable { mutableStateOf("") }
     var limit by rememberSaveable { mutableStateOf("") }
@@ -376,7 +373,8 @@ private fun TradeScreen(model: DeskModel, live: Boolean) {
             FilterChip(selected = !side, onClick = { side = false; model.clearPreview() }, label = { Text("Verkaufen") })
         }
         AmountField(qty, { qty = it; model.clearPreview() }, "Menge in Einheiten")
-        if (live) AmountField(limit, { limit = it; model.clearPreview() }, "Limit in EUR · leer für Marktorder")
+        if (live) Text("Direkt über Kraken: ausschließlich Marktorders, maximal 250 € pro Auftrag.",
+        color = Amber, style = MaterialTheme.typography.bodySmall)
         Button(onClick = { model.orderPreview(side, qty, limit) }, enabled = !busy && qty.isNotBlank()) { Text("Ordervorschau") }
     }
     val draft = order
@@ -399,9 +397,16 @@ private fun TradeScreen(model: DeskModel, live: Boolean) {
                 Metric("Gebührenschätzung", real.optString("fee_estimate") + " €")
                 Text("Der tatsächliche Ausführungspreis und die Gebühr kommen von Kraken.", color = Amber)
             }
-            Button(onClick = model::submit, enabled = !busy) {
-                Text(if (live) "Echtgeldorder absenden" else "Papierorder ausführen")
+            Button(onClick = { if (live) confirmLiveOrder = true else model.submit() }, enabled = !busy) {
+                Text(if (live) "Echtgeldorder prüfen und absenden" else "Papierorder ausführen")
             }
+            if (confirmLiveOrder && live) AlertDialog(
+                onDismissRequest = { confirmLiveOrder = false },
+                title = { Text("Echte Kraken-Marktorder ausführen?") },
+                text = { Text("Dies kann sofort reales Geld kosten. Kraken führt zum aktuellen Marktpreis aus; Limits und Vorschau werden vor der Übermittlung nochmals geprüft.") },
+                confirmButton = { TextButton(onClick = { confirmLiveOrder = false; model.submit() }) { Text("Verbindlich absenden") } },
+                dismissButton = { TextButton(onClick = { confirmLiveOrder = false }) { Text("Abbrechen") } }
+            )
         }
     }
     if (live) Section("Kraken-Orders") {
@@ -427,6 +432,14 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
     val local by model.localBot.collectAsStateWithLifecycle()
     val serverPaper by model.serverPaper.collectAsStateWithLifecycle()
     val address by model.savedAddress.collectAsStateWithLifecycle()
+    val pulse by model.pulse.collectAsStateWithLifecycle()
+    val pulseStatus by model.pulseStatus.collectAsStateWithLifecycle()
+    val dex by model.dexResult.collectAsStateWithLifecycle()
+    val dexStatus by model.dexStatus.collectAsStateWithLifecycle()
+    val listingStatus by model.listingStatus.collectAsStateWithLifecycle()
+    val newListings by model.newListings.collectAsStateWithLifecycle()
+    var dexMint by rememberSaveable { mutableStateOf("") }
+    val krakenConnected by model.krakenConnected.collectAsStateWithLifecycle()
     val quotes by model.quotes.collectAsStateWithLifecycle()
     val candles by model.chart.collectAsStateWithLifecycle()
     val pairs by model.pairs.collectAsStateWithLifecycle()
@@ -457,6 +470,57 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
             "LP-Audit, Holder Map, Whale Watch und DEX-Sniping benötigen separate On-Chain-Daten " +
             "und sind hier nicht verfügbar.", color = Muted, style = MaterialTheme.typography.bodySmall)
     }
+    Section("WHALE WATCH · ORDERBUCH / TRADES") {
+        Text("Kraken-Börsendaten: keine On-Chain-Wallets und kein Social-Sentiment.",
+            color = Muted, style = MaterialTheme.typography.bodySmall)
+        Metric("Status", pulseStatus)
+        if (pulse != null) {
+            Metric("Kauforders · Top 25", eur(pulse?.bidDepthEur))
+            Metric("Verkaufsorders · Top 25", eur(pulse?.askDepthEur))
+            Metric("Anteil aggressiver Käufe", pulse?.buyPressure?.let { pct(it) } ?: "—")
+            Metric("Größter beobachteter Trade", eur(pulse?.largestTradeEur))
+            Metric("Trades ab 50.000 €", pulse?.largeTrades?.toString() ?: "—")
+            Metric("Ausgewertete Trades", pulse?.observedTrades?.toString() ?: "—")
+        }
+        OutlinedButton(onClick = model::analyzePulse) { Text("Kraken-Analyse aktualisieren") }
+        Text("Wale sind hier große Börsentrades, keine identifizierten Wallets. Der DEX-Scanner darunter nutzt getrennte öffentliche On-Chain-Daten.",
+            color = Amber, style = MaterialTheme.typography.bodySmall)
+    }
+    Section("KRAKEN SNIPER SCOUT · Neue Börsenpaare") {
+        Text("Beobachtung neuer Kraken-EUR-Paare seit dem letzten lokalen Vergleich. " +
+            "Keine automatischen Käufe und kein DEX-Token-Sniping.", color = Muted,
+            style = MaterialTheme.typography.bodySmall)
+        Text(listingStatus, color = Amber, style = MaterialTheme.typography.bodySmall)
+        for (symbol in newListings.take(20)) Metric("Neues Paar", symbol)
+        OutlinedButton(onClick = model::scanKrakenListings) { Text("Kraken-Listings abgleichen") }
+    }
+    Section("DEX SCOUT · Solana") {
+        Text("LP-Liquidität, Mint-Rechte, Freeze-Rechte und Top-Token-Konten. " +
+            "Benötigt keinen API-Key: öffentliche DEX Screener- und Solana-RPC-Abfragen.",
+            color = Muted, style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(dexMint, { dexMint = it }, label = { Text("Solana Mint-Adresse") },
+            singleLine = true, modifier = Modifier.fillMaxWidth())
+        Button(onClick = { model.scanDex(dexMint) }, enabled = dexMint.length in 32..44) {
+            Text("Tokenrisiken prüfen")
+        }
+        Text(dexStatus, color = Muted, style = MaterialTheme.typography.bodySmall)
+        dex?.let { data ->
+            Metric("Token / DEX", data.poolName + " · " + data.dex)
+            Metric("LP-Liquidität (USD)", data.liquidityUsd.stripTrailingZeros().toPlainString())
+            Metric("24h DEX-Volumen (USD)", data.volume24hUsd.stripTrailingZeros().toPlainString())
+            Metric("24h Kursveränderung", data.priceChange24h?.let {
+                String.format(Locale.GERMANY, "%+.2f %%", it)
+            } ?: "—")
+            Metric("DEX Käufe / Verkäufe (24h)", "${data.buyTransactions} / ${data.sellTransactions}")
+            Metric("Top 10 Token-Konten", data.top10AccountsShare?.let { pct(it) } ?: "—")
+            Metric("Weitere Token prägen?", data.mintAuthority?.let { if (it) "Ja" else "Nein" } ?: "Unbekannt")
+            Metric("Token einfrierbar?", data.freezeAuthority?.let { if (it) "Ja" else "Nein" } ?: "Unbekannt")
+            Metric("LP-Sperre verifiziert?", "Nein · Daten fehlen")
+            Text("Top-Token-Konten sind keine eindeutigen Wallet-Inhaber. Ein hoher Anteil kann auch LP-Verwahrung sein. " +
+                "DEX-Sniping und Kauf über Kraken sind nur bei separat gelistetem Kraken-Spotpaar möglich.",
+                color = Amber, style = MaterialTheme.typography.bodySmall)
+        }
+    }
     Section("Bot · $selected") {
         Text("Regelbasierte Signale", color = Mint, style = MaterialTheme.typography.labelMedium)
         Strategy.entries.forEach { item ->
@@ -466,13 +530,10 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
             }
         }
         if (live) {
-            Metric("Server", backend?.optString("bot_status").orEmpty().ifBlank { "Unbestätigt" })
-            Text(backend?.optString("last_signal").orEmpty().ifBlank { "Noch kein bestätigtes Serversignal" }, color = Muted)
-            SecretField(code, { code = it }, "Separater Automatikcode")
-            Button(onClick = { model.controlServer("start_live", code); code = "" }, enabled = code.isNotBlank()) {
-                Text("Echtgeldautomatik freigeben")
-            }
-            OutlinedButton(onClick = { model.controlServer("pause") }) { Text("Server pausieren") }
+            Metric("Kraken", if (krakenConnected) "API-Schlüssel verbunden" else "Nicht verbunden")
+            Text("Manueller Echtgeldhandel ist aktiv. Autonomer Live-Handel ohne dauerhaft abgesicherten Stop-Mechanismus bleibt deaktiviert.",
+                color = Amber)
+            OutlinedButton(onClick = model::usePaper) { Text("Papierautomatik öffnen") }
         } else {
             Text(signal, color = Muted)
             Text("Papierautomatik läuft in der geöffneten App. Stop-Loss und Take-Profit werden lokal überwacht.", color = Muted)
@@ -480,23 +541,12 @@ private fun BotScreen(model: DeskModel, live: Boolean) {
                 Button(onClick = model::startLocal, enabled = !local) { Text("Papierbot starten") }
                 OutlinedButton(onClick = model::stopLocal, enabled = local) { Text("Pause") }
             }
-            if (address.isNotBlank() && backend?.optString("bot_mode") != "live") {
-                HorizontalDivider(color = Borders)
-                Text("Server-Papierkonto · eigenes virtuelles Guthaben", color = Mint)
-                Metric("Virtuelle Server-EUR", eur(serverPaper?.decimalOrNull("cash")))
-                Text(backend?.optString("last_signal").orEmpty(), color = Muted)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { model.controlServer("start_paper") }, enabled = backend != null) {
-                        Text("Serverbot starten")
-                    }
-                    OutlinedButton(onClick = { model.controlServer("pause") }, enabled = backend != null) { Text("Pausieren") }
-                }
-            }
+            Text("Papierbot arbeitet nur, während die App aktiv ist.", color = Muted)
         }
-        Button(onClick = {
-            model.stopLocal()
-            if (address.isNotBlank()) model.controlServer("stop")
-        }, colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Ink)) { Text("Not-Stopp") }
+        Button(onClick = { model.stopLocal() },
+            colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Ink)) {
+            Text("Papierbot stoppen")
+        }
     }
 }
 
@@ -509,7 +559,7 @@ private fun StatsScreen(model: DeskModel, live: Boolean) {
     val details by model.livePortfolio.collectAsStateWithLifecycle()
     if (live) Section("Abgerechnete NightDesk-Ausführungen") {
         val data = details?.optJSONObject("statistics")
-        if (data == null) Text("Keine bestätigten Kontodaten", color = Muted)
+        if (data == null || !data.has("trades")) Text("Direkte Kraken-Trades: Statistik noch nicht synchronisiert", color = Muted)
         else {
             val trades = data.optInt("trades")
             Metric("Realisiertes Ergebnis mit erfasstem Einstand", eur(data.decimalOrNull("realized")))
@@ -585,32 +635,63 @@ private fun SettingsScreen(model: DeskModel, live: Boolean) {
     val savedAddress by model.savedAddress.collectAsStateWithLifecycle()
     val backendStatus by model.backendStatus.collectAsStateWithLifecycle()
     val state by model.backendState.collectAsStateWithLifecycle()
+    val krakenConnected by model.krakenConnected.collectAsStateWithLifecycle()
+    val krakenStatus by model.krakenStatus.collectAsStateWithLifecycle()
+    val krakenBalances by model.liveBalances.collectAsStateWithLifecycle()
     val busy by model.busy.collectAsStateWithLifecycle()
     var capital by rememberSaveable { mutableStateOf("1000") }
     var address by rememberSaveable(savedAddress) { mutableStateOf(savedAddress) }
-    var token by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
+    var apiSecret by remember { mutableStateOf("") }
     var confirmReset by remember { mutableStateOf(false) }
     val notify by model.notify.collectAsStateWithLifecycle()
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         model.setNotices(it)
     }
     Section("Handelsmodus") {
-        Text(if (live) "Echtgeld · Kraken" else "Papier · Simulation", color = if (live) Amber else Mint)
-        if (!BuildConfig.LIVE_ENABLED) Text("Installierbarer Papier-Testbuild. Echtgeld ist gesperrt.", color = Muted)
-        else {
-            Button(onClick = model::usePaper) { Text("Papiermodus") }
-            if (state?.optBoolean("live_enabled") == true) {
-                OutlinedButton(onClick = model::useLive, enabled = !busy && !live) { Text("Echtgeldübersicht öffnen") }
-                OutlinedButton(onClick = { model.disableLive() }, enabled = !busy) { Text("Echtgeld serverseitig sperren") }
-            } else {
-                OutlinedButton(onClick = model::prepareLive, enabled = state != null && !busy) { Text("1 · Kraken-Zugriff prüfen") }
-                SecretField(code, { code = it }, "Freigabecode vom Server")
-                Button(onClick = { model.confirmLive(code); code = "" }, enabled = code.isNotBlank() && !busy) {
-                    Text("2 · Echtgeld freischalten")
-                }
+        Text(if (live) "Echtgeld · Kraken Direct" else "Papier · Simulation",
+            color = if (live) Amber else Mint)
+        Button(onClick = model::usePaper) { Text("Papiermodus") }
+        if (BuildConfig.LIVE_ENABLED && krakenConnected) {
+            if (!live) OutlinedButton(onClick = model::useLive, enabled = !busy) {
+                Text("Kraken-Echtgeldübersicht öffnen")
+            } else OutlinedButton(onClick = model::disableLive) { Text("Echtgeldansicht verlassen") }
+        } else if (!BuildConfig.LIVE_ENABLED) {
+            Text("Papier-Testbuild: Kontoabfrage möglich, Echtgeldorders gesperrt. " +
+                "Für Echtgeld brauchst du eine privat signierte Release-APK.", color = Amber)
+        }
+    }
+    Section("Kraken · direkte API-Verbindung") {
+        Metric("Verbindung", krakenStatus)
+        Text("Kein Server und kein zusätzliches Konto nötig: Nur Kraken API-Key und API-Secret. " +
+            "Die verschlüsselten Schlüssel bleiben auf deinem Gerät und werden ausschließlich für Kraken-Anfragen verwendet.",
+            color = Muted, style = MaterialTheme.typography.bodySmall)
+        if (!krakenConnected) {
+            SecretField(apiKey, { apiKey = it }, "Kraken API-Key")
+            SecretField(apiSecret, { apiSecret = it }, "Kraken API-Secret")
+            Button(onClick = {
+                model.connectKraken(apiKey, apiSecret)
+                apiKey = ""
+                apiSecret = ""
+            }, enabled = !busy && apiKey.isNotBlank() && apiSecret.isNotBlank()) {
+                Text("Kraken-Verbindung prüfen und speichern")
+            }
+        } else {
+            val balance = krakenBalances
+            Metric("EUR-Guthaben", balance?.decimalOrNull("EUR")?.let { eur(it) } ?: "—")
+            OutlinedButton(onClick = model::refreshKraken, enabled = !busy) {
+                Text("Kraken-Kontostand aktualisieren")
+            }
+            OutlinedButton(onClick = model::disconnectKraken, enabled = !busy) {
+                Text("Kraken-Schlüssel auf Gerät entfernen")
+            }
+            OutlinedButton(onClick = model::acknowledgeUncertain, enabled = !busy) {
+                Text("Ungeklärte Order nach Kraken-Pro-Prüfung bestätigen")
             }
         }
+        Text("Bei Kraken nur Query Funds, Open Orders und gegebenenfalls Create/Cancel Orders erlauben. " +
+            "Niemals Withdrawal- oder Transfer-Berechtigungen geben.",
+            color = Amber, style = MaterialTheme.typography.bodySmall)
     }
     Section("Papierkonto") {
         Metric("Virtuelles Startkapital", eur(account.account?.initial?.decimal()))
@@ -621,26 +702,10 @@ private fun SettingsScreen(model: DeskModel, live: Boolean) {
             confirmButton = { TextButton(onClick = { confirmReset = false; model.reset(capital) }) { Text("Zurücksetzen") } },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Abbrechen") } })
     }
-    Section("Backend · HTTPS") {
-        Text(backendStatus, color = Muted)
-        OutlinedTextField(address, { address = it }, label = { Text("HTTPS-Adresse") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-        SecretField(token, { token = it }, "Zugriffstoken")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { model.connect(address, token); token = "" }, enabled = !busy && token.isNotBlank()) { Text("Verbinden") }
-            if (savedAddress.isNotBlank()) OutlinedButton(onClick = model::disconnect) { Text("Trennen") }
-        }
-    }
+
     Section("Risiko und Datenschutz") {
-        val risk = state?.optJSONObject("risk")
-        if (live && risk != null) {
-            Metric("Server · Positionsrisiko", pct(risk.getString("per_trade").toDouble()))
-            Metric("Server · Tagesverlust", pct(risk.getString("daily_loss").toDouble()))
-            Metric("Server · Drawdown", pct(risk.getString("drawdown").toDouble()))
-            Metric("Server · Positionslimit", risk.getString("max_positions"))
-            Metric("Server · Orderlimit", eur(risk.decimalOrNull("max_order_eur")))
-            Metric("Server · Tageskaufgrenze", eur(risk.decimalOrNull("max_daily_eur")))
-        }
+        Metric("Direkte Kraken-Marktorder", "max. 250 €")
+        Metric("Live-Bot ohne Server", "nicht aktiviert")
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Benachrichtigungen für Papierausführungen", modifier = Modifier.weight(1f))
             Switch(checked = notify, onCheckedChange = {
@@ -653,7 +718,9 @@ private fun SettingsScreen(model: DeskModel, live: Boolean) {
         Metric("Papierbot · Tagesverlust", "3 %")
         Metric("Papierbot · Drawdown", "10 %")
         Metric("Papierbot · Positionslimit", "3")
-        Text("Papierdaten bleiben lokal. Kraken erhält öffentliche Kursanfragen. Das konfigurierte Backend erhält dein Zugriffstoken und die dort ausgelösten Handelsanfragen.", color = Muted)
+        Text("Papierdaten bleiben lokal. Kraken erhält öffentliche Kursanfragen und authentifizierte Anfragen für dein Konto. " +
+            "NightDesk übermittelt keinen API-Schlüssel an Drittserver. Live-Orders werden nicht automatisch im Hintergrund fortgesetzt.",
+            color = Muted)
     }
 }
 

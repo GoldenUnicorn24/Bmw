@@ -1,13 +1,36 @@
-# NightDesk Trade 2.0
+# NightDesk Trade 2.1 — Kraken Direct
 
-NightDesk ist eine native Android-App für Kraken-Spotmärkte mit EUR-Kurswährung. Das lokale Papierkonto öffnet mit 1.000 virtuellen Euro und erhält Kursdaten direkt von Kraken. Der separat installierbare Python-Dienst führt den Serverbot aus und verwaltet die Verbindung zum echten Börsenkonto. Die App zeigt den aktiven Handelsmodus oben auf jeder Seite.
+## Ohne eigenen Server: nur Kraken API-Key + Secret
+
+1. APK öffnen → **Einstellungen → Kraken · direkte API-Verbindung**.
+2. Kraken-API-Key und **API-Secret** in der App eingeben. NightDesk sendet eine signierte Anfrage an `https://api.kraken.com/0/private/Balance` und speichert die Zugangsdaten erst nach erfolgreicher Antwort. Die lokale Speicherung verwendet Android Keystore AES-GCM. Kein NightDesk-Backend, keine zusätzliche Domain und kein separates Zugangstoken erforderlich.
+3. Für Kontostand und Prüfung sind mindestens **Query funds** und **Query open orders & trades** erforderlich; für manuelle Echtgeldorders auch **Create & modify orders** und **Cancel & close orders**. **Niemals Withdraw, Deposit, Transfer, Earn** oder andere Kontoübertragungsrechte aktivieren. Bei API-spezifischer 2FA kann eine gesonderte OTP-Behandlung nötig werden; die direkte Version unterstützt keine API-OTP-Eingabe.
+4. Auf dem Papier-Testbuild kannst du die Verbindung und Kontostandsabfrage testen; **Echtgeldorders sind dort gesperrt**. Für Echtgeld benötigt NightDesk einen privat signierten Release-Build (siehe unten). Damit kannst du in **Einstellungen** zur Echtgeldansicht wechseln und unter **Trading** eine Kraken-Marktorder mit Vorschau und zusätzlicher Bestätigung abschicken.
+5. Fällt die Verbindung während einer Live-Order aus, blockiert die App neue Echtgeldorders. Prüfe in **Kraken Pro** offene **und** abgeschlossene Orders und bestätige erst dann die manuelle Klärung in den Einstellungen. Es erfolgt **niemals** ein ungesicherter automatischer Wiederholungsversuch.
+
+**Handelsgrenzen:** Spot-EUR-Paare, maximale manuelle Ordergröße 250 €, nur Marktorders, Prüfung von Kraken-Mindestmenge, Spread ≤ 1 %, 24h-Volumen ≥ 20.000 €, bestes sichtbares Geld-/Briefvolumen, Preisverschlechterung gegenüber Vorschau und verfügbarem Guthaben. Gebühren und Ausführung können tatsächlich von der Schätzung abweichen. Alle Live-Ausführungen benötigen eine aktive manuelle Bestätigung; **kein autonomer Live-Bot** wird nur durch Hinterlegen der Schlüssel aktiviert. Eine Android-App bietet beim Schließen/Absturz keine garantierte Stop-Loss-Überwachung.
+
+## Meme Radar, Whale Watch und Handelsgrenzen
+
+Zusätzlich gibt es den **Kraken Sniper Scout** als rein beobachtenden Listingvergleich: Beim ersten Scan wird die Liste aktueller Kraken-EUR-Märkte lokal gespeichert, spätere Scans markieren tatsächlich neu hinzugekommene Paare seit der vorherigen Momentaufnahme. Das ist **kein** DEX-Sniper und **kein** automatischer Kauf.
+
+Die App nutzt für den Scanner ausschließlich echte Kraken-Daten: `AssetPairs` (handelbare EUR-Paare), `Depth` (25 beste Orderbuchstufen), `Trades` (historische Kraken-Ausführungen) und `Ticker/OHLC` (Volatilität, Liquidität und Kurse). Der Scanner zeigt Orderbuchvolumen, aggressives Kaufverhältnis und große beobachtete Trades. **Dies sind keine On-Chain-Wale oder Wallet-Bestände**. Für Solana-Mint-Adressen gibt es nun zusätzlich den **DEX SCOUT**: Er liest DEX Screener (`token-pairs/v1/solana/{mint}`) und die öffentlichen Solana-RPC-Endpunkte `getAccountInfo`, `getTokenSupply`, `getTokenLargestAccounts`. Er zeigt DEX-Liquidität, 24h-Volumen, Handelstransaktionen, Mint- und Freeze-Berechtigungen und den Anteil der größten zehn **Token-Konten** (nicht zehn eindeutig verschiedene Menschen/Wallets). Bei RPC-Sperren stehen nicht verifizierte Angaben ausdrücklich auf **Unbekannt**. **LP-Lock-Status kann aus diesen Daten nicht sicher bestimmt werden und bleibt unverifiziert.** Der Scanner ist read-only, er kann keine DEX-Käufe ausführen und sendet **keine Kraken-Schlüssel** an DEX Screener oder Solana. Social-Media-Sentiment-Daten werden weiterhin nicht vorgetäuscht. Token ohne Kraken-Listing können nicht mit dem Kraken-Key gehandelt werden; ein DEX-Sniper erfordert grundsätzlich eine separate Wallet, Infrastruktur und on-chain Prüfungen.
+
+## Privater Release-Build
+
+Der öffentliche GitHub-Actions-Testbuild ist für die Echtgeldfunktion bewusst gesperrt. Für die private Echtgeld-APK werden die vorhandenen vier GitHub Actions Secrets (`NIGHTDESK_KEYSTORE_BASE64`, `NIGHTDESK_STORE_PASSWORD`, `NIGHTDESK_KEY_ALIAS`, `NIGHTDESK_KEY_PASSWORD`) gebraucht. Damit ist keine zweite App-Verbindung oder Server-Hosting nötig, aber ein sicherer, dauerhaft kontrollierter Release-Signaturschlüssel. Nicht denselben Debug-Schlüssel eines öffentlichen GitHub-Runners zur Echtgeldfreigabe verwenden. Der reale Handelsweg ist mangels Nutzer-API-Key und echtem Echtgeldtest nicht vollständig End-to-End abgenommen.
+
+---
+
+
+NightDesk ist eine native Android-App für Kraken-Spotmärkte mit EUR-Kurswährung. Das lokale Papierkonto öffnet mit 1.000 virtuellen Euro und erhält Kursdaten direkt von Kraken. Für den Kraken-Direct-Modus ist **kein eigener Python-Server nötig**. Ein älteres, optionales Backend ist im Repository weiterhin vorhanden, wird für die direkte App-Verbindung aber nicht benötigt. Die App zeigt den aktiven Handelsmodus oben auf jeder Seite.
 
 ## APK installieren
 
-1. Öffne [NightDesk Trade 2.0 auf GitHub](https://github.com/GoldenUnicorn24/Bmw/releases/tag/nightdesk-v2.0) oder lade das Artefakt `NightDesk-Trade-2.0-Papier-Testbuild` aus dem [NightDesk-Workflow](https://github.com/GoldenUnicorn24/Bmw/actions/workflows/nightdesk-android.yml).
-2. Bei einem Workflow-Artefakt entpacke zuerst das ZIP. Öffne `NightDesk-Trade-2.0.apk` auf dem Android-Gerät. Android kann einmalig die Erlaubnis für die verwendete Installationsquelle verlangen.
+1. Öffne den [NightDesk-Workflow](https://github.com/GoldenUnicorn24/Bmw/actions/workflows/nightdesk-android.yml) und lade das Artefakt `NightDesk-Trade-2.1-Papier-Testbuild`.
+2. Bei einem Workflow-Artefakt entpacke zuerst das ZIP. Öffne `NightDesk-Trade-2.1.apk` auf dem Android-Gerät. Android kann einmalig die Erlaubnis für die verwendete Installationsquelle verlangen.
 3. Starte NightDesk. Der Papier-Testbuild verwendet die Anwendungs-ID `de.nightdesk.trade.paper`. Die mit einem privaten Release-Schlüssel signierte Variante verwendet `de.nightdesk.trade` und bekommt ein eigenes lokales Papierkonto.
-4. Alternativ installierst du die APK über `adb install -r NightDesk-Trade-2.0.apk`. Die App unterstützt Android ab API 26, kompiliert gegen API 35 und enthält native Bibliotheken für `arm64-v8a` und Emulatoren. Der Samsung Galaxy S26 Ultra benötigt eine separate Geräteabnahme.
+4. Alternativ installierst du die APK über `adb install -r NightDesk-Trade-2.1.apk`. Die App unterstützt Android ab API 26, kompiliert gegen API 35 und enthält native Bibliotheken für `arm64-v8a` und Emulatoren. Der Samsung Galaxy S26 Ultra benötigt eine separate Geräteabnahme.
 
 Der Papier-Testbuild hat einen Debugsignaturschlüssel und sperrt sämtliche Kraken-Echtgeldaktionen in der App. Android-Updates benötigen dieselbe Anwendungs-ID und denselben Signaturschlüssel. GitHub-gebaute Papier-Testversionen können einen anderen Debugschlüssel als lokale Builds haben.
 

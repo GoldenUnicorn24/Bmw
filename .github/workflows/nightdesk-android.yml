@@ -10,7 +10,7 @@ on:
       - main
       - 'feature/nightdesk-trade-2.0'
     tags:
-      - nightdesk-v2.0
+      - nightdesk-v2.1
     paths:
       - 'nightdesk/**'
       - '.github/workflows/nightdesk-android.yml'
@@ -60,12 +60,12 @@ jobs:
       - name: Prepare paper APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/NightDesk-Trade-2.0.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify dist/NightDesk-Trade-2.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/NightDesk-Trade-2.1.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify dist/NightDesk-Trade-2.1.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: NightDesk-Trade-2.0-Papier-Testbuild
-          path: nightdesk/dist/NightDesk-Trade-2.0.apk
+          name: NightDesk-Trade-2.1-Papier-Testbuild
+          path: nightdesk/dist/NightDesk-Trade-2.1.apk
           if-no-files-found: error
       - name: Give the runner access to KVM
         run: |
@@ -83,7 +83,7 @@ jobs:
           script: gradle --no-daemon :app:connectedDebugAndroidTest
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/tags/nightdesk-v2.0'
+    if: github.event_name == 'push' && github.ref == 'refs/tags/nightdesk-v2.1'
     needs: [android, test-backend]
     runs-on: ubuntu-24.04
     permissions:
@@ -99,7 +99,7 @@ jobs:
         run: git merge-base --is-ancestor HEAD origin/main
       - uses: actions/download-artifact@v4
         with:
-          name: NightDesk-Trade-2.0-Papier-Testbuild
+          name: NightDesk-Trade-2.1-Papier-Testbuild
           path: nightdesk/dist
       - uses: actions/setup-java@v4
         with:
@@ -133,8 +133,8 @@ jobs:
           trap 'rm -f "$NIGHTDESK_KEYSTORE"' EXIT
           printf '%s' "$NIGHTDESK_KEYSTORE_BASE64" | base64 --decode > "$NIGHTDESK_KEYSTORE"
           gradle --no-daemon :app:assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk dist/NightDesk-Trade-2.0.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify dist/NightDesk-Trade-2.0.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/NightDesk-Trade-2.1.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify dist/NightDesk-Trade-2.1.apk
           echo 'status=Signierte Release-APK · Kraken-Echtgeld-End-to-End unbestätigt' >> "$GITHUB_OUTPUT"
       - name: Publish NightDesk release
         env:
@@ -142,5 +142,5 @@ jobs:
           BUILD_STATUS: ${{ steps.signing.outputs.status }}
           PRERELEASE: ${{ steps.signing.outputs.prerelease }}
         run: |
-          gh release create nightdesk-v2.0 dist/NightDesk-Trade-2.0.apk --verify-tag --latest=false ${PRERELEASE:+--prerelease} \
-            --title "NightDesk Trade 2.0" --notes "$BUILD_STATUS"
+          gh release create nightdesk-v2.1 dist/NightDesk-Trade-2.1.apk --verify-tag --latest=false ${PRERELEASE:+--prerelease} \
+            --title "NightDesk Trade 2.1" --notes "$BUILD_STATUS"

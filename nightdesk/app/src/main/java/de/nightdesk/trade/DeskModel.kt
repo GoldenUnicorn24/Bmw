@@ -30,6 +30,18 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
     private val db = PaperDb.open(app)
     private val broker = PaperBroker(db)
     val markets = Markets()
+    private val krakenKeys = KrakenKeys(app)
+    private val kraken = KrakenDirect(krakenKeys, markets.http)
+    val krakenConnected = MutableStateFlow(krakenKeys.configured)
+    val krakenStatus = MutableStateFlow(if (krakenKeys.configured) "API-Schlüssel gespeichert" else "Nicht verbunden")
+    val pulse = MutableStateFlow<KrakenPulse?>(null)
+    val pulseStatus = MutableStateFlow("Noch keine Kraken-Orderbuchanalyse")
+    private val listingPrefs = app.getSharedPreferences("nightdesk.kraken.listing-snapshot", 0)
+    val listingStatus = MutableStateFlow("Kraken-Listings noch nicht verglichen")
+    val newListings = MutableStateFlow<List<String>>(emptyList())
+    private val dex = DexScout(markets.http)
+    val dexResult = MutableStateFlow<DexReport?>(null)
+    val dexStatus = MutableStateFlow("Noch kein Solana-Token geprüft")
     private val credentials = BackendCredentials(app)
     private val backend = Backend(credentials, markets.http)
     val savedAddress = MutableStateFlow(credentials.address)
@@ -90,10 +102,21 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
                 delay(12_000)
             }
         }
+        // No private backend is required for the direct Kraken workflow.
+        // Deliberately do not auto-connect a legacy server or start a live bot.
         viewModelScope.launch {
             while (true) {
-                if (savedAddress.value.isNotBlank()) refreshBackend()
-                delay(10_000)
+                if (live.value && krakenConnected.value) {
+                    try {
+                        reloadLive()
+                        krakenStatus.value = "Kraken Direct · Kontodaten aktuell"
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        krakenStatus.value = "Kraken-Verbindung unterbrochen · Kontodaten nicht aktuell"
+                    }
+                }
+                delay(25_000)
             }
         }
     }
@@ -103,6 +126,8 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
         activePreview.value = null
         livePreview.value = null
         research.value = emptyList()
+        pulse.value = null
+        pulseStatus.value = "Kraken-Markt gewechselt"
         chart.value = emptyList()
         chartTask?.cancel()
         chartTask = viewModelScope.launch {
@@ -137,10 +162,33 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
         val selectedPair = pair()
         clearPreview()
         if (live.value) {
-            val order = JSONObject().put("id", UUID.randomUUID().toString()).put("symbol", selectedPair.symbol)
+            check(BuildConfig.LIVE_ENABLED) { "Nur privat signierte Release-APKs dürfen Echtorders senden" }
+            require(limit.isBlank()) { "Direkter Kraken-Handel unterstützt nur Marktorders" }
+            require(amount >= selectedPair.minimum && amount.scale() <= selectedPair.quantityDecimals) {
+                "Kraken-Mindestmenge oder Dezimalstellen ungültig"
+            }
+            val quote = markets.quote(selectedPair)
+            require(quote.isCurrent() && quote.spread <= "0.01".decimal() &&
+                quote.volumeEur >= "20000".decimal()) { "Kurs, Spread oder Liquidität unsicher" }
+            require(amount <= if (buy) quote.askQuantity else quote.bidQuantity) {
+                "Menge über der sichtbaren besten Kraken-Kursstufe"
+            }
+            val px = if (buy) quote.ask else quote.bid
+            val total = amount * px
+            require(total >= selectedPair.minCost && total <= "250".decimal()) {
+                "Orderwert muss zwischen Börsenminimum und 250 € liegen"
+            }
+            val balances = kraken.balances()
+            val asset = if (buy) "ZEUR" else selectedPair.base
+            val available = balances.optString(asset, "0").toBigDecimalOrNull() ?: zero
+            require(available >= if (buy) total * "1.01".decimal() else amount) {
+                "Verfügbares Kraken-Guthaben reicht nicht"
+            }
+            val order = JSONObject().put("symbol", selectedPair.symbol)
                 .put("side", if (buy) "buy" else "sell").put("quantity", amount.toPlainString())
-            if (limit.isNotBlank()) order.put("limit", number(limit).toPlainString())
-            livePreview.value = backend.call("v1/live/preview", order).put("order", order)
+            livePreview.value = JSONObject().put("order", order)
+                .put("reference", px.toPlainString()).put("fee_estimate", (total * "0.004".decimal()).toPlainString())
+                .put("at", System.currentTimeMillis())
         } else {
             val settings = checkNotNull(account.value.account)
             activePreview.value = preview(settings.epoch, selectedPair, buy, amount, markets.quote(selectedPair))
@@ -151,10 +199,31 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
         if (live.value) {
             val draft = checkNotNull(livePreview.value)
             livePreview.value = null
-            val result = backend.call("v1/live/order", draft.getJSONObject("order").put("ticket", draft.getString("ticket")))
-            val tradeStatus = result.optString("status")
-            val diagnostic = result.optString("error").takeUnless { it.isBlank() || it == "null" }
-            banner.value = listOfNotNull("Kraken-Order", tradeStatus, diagnostic).joinToString(" · ")
+            require(System.currentTimeMillis() - draft.getLong("at") in 0..30_000) {
+                "Ordervorschau abgelaufen"
+            }
+            val order = draft.getJSONObject("order")
+            val selectedPair = pair(order.getString("symbol"))
+            val quote = markets.quote(selectedPair)
+            val buy = order.getString("side") == "buy"
+            val now = if (buy) quote.ask else quote.bid
+            val previous = draft.getString("reference").decimal()
+            require(quote.isCurrent() && quote.spread <= "0.01".decimal() &&
+                quote.volumeEur >= "20000".decimal()) { "Aktuelle Kursprüfung fehlgeschlagen" }
+            require(if (buy) now <= previous else now >= previous) {
+                "Kurs verschlechtert – neue Vorschau erforderlich"
+            }
+            val qty = order.getString("quantity").decimal()
+            val maxSize = if (buy) quote.askQuantity else quote.bidQuantity
+            require(qty <= maxSize && qty * now <= "250".decimal()) { "Liquiditäts-/Orderlimit überschritten" }
+            val balances = kraken.balances()
+            val available = balances.optString(if (buy) "ZEUR" else selectedPair.base, "0")
+                .toBigDecimalOrNull() ?: zero
+            require(available >= if (buy) qty * now * "1.01".decimal() else qty) {
+                "Nicht genügend Kraken-Guthaben"
+            }
+            val txid = kraken.submitMarket(selectedPair, order.getString("side"), qty)
+            banner.value = "Kraken hat die Marktorder angenommen · " + txid
             reloadLive()
         } else {
             val draft = checkNotNull(activePreview.value)
@@ -164,6 +233,56 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
             banner.value = "Papierorder simuliert"
             notices.fill("Papierorder simuliert", draft.pair.symbol)
         }
+    }
+
+    fun scanKrakenListings() = action {
+        markets.load()
+        val current = pairs.value.map { it.symbol }.toSet()
+        val previous = listingPrefs.getStringSet("known", null)?.toSet()
+        newListings.value = if (previous == null) emptyList() else (current - previous).sorted()
+        check(listingPrefs.edit().putStringSet("known", current).commit())
+        listingStatus.value = if (previous == null) "Erste Kraken-Referenz gespeichert. Nächster Vergleich erkennt neue EUR-Paare."
+            else if (newListings.value.isEmpty()) "Keine neuen Kraken-EUR-Paare seit dem letzten Vergleich"
+            else "Neue Kraken-EUR-Paare seit dem letzten Vergleich: " + newListings.value.size
+    }
+
+    fun scanDex(mint: String) = action {
+        dexResult.value = null
+        val report = dex.scan(mint)
+        dexResult.value = report
+        dexStatus.value = "DEX- und Solana-Daten geladen · nur Analyse, kein DEX-Handel"
+    }
+
+    fun analyzePulse() = action {
+        pulse.value = markets.pulse(pair())
+        pulseStatus.value = "Kraken-Orderbuch und Trades gelesen"
+    }
+
+    fun refreshKraken() = action {
+        check(krakenConnected.value) { "Kraken noch nicht verbunden" }
+        reloadLive()
+        krakenStatus.value = "Kraken Direct · Kontostand aktualisiert"
+    }
+
+    fun connectKraken(key: String, secret: String) = action {
+        kraken.connect(key, secret)
+        krakenConnected.value = true
+        krakenStatus.value = "Direkt mit Kraken verbunden · Guthaben geprüft"
+        reloadLive()
+        banner.value = "Kraken-Zugang erfolgreich verifiziert"
+    }
+
+    fun disconnectKraken() {
+        stopLocal()
+        kraken.disconnect()
+        krakenConnected.value = false
+        krakenStatus.value = "Kraken-Schlüssel vom Gerät entfernt"
+        usePaper()
+    }
+
+    fun acknowledgeUncertain() = action {
+        krakenKeys.acknowledgeUnknownAfterKrakenReview()
+        banner.value = "Sperre nach manueller Kraken-Pro-Prüfung aufgehoben"
     }
 
     fun reset(text: String) = action {
@@ -330,7 +449,8 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun useLive() = action {
-        check(backendState.value?.optBoolean("live_enabled") == true) { "Echtgeld zuerst freischalten" }
+        check(krakenConnected.value) { "Erst Kraken-API-Key und Secret hinterlegen" }
+        check(BuildConfig.LIVE_ENABLED) { "Signierte Release-APK für Echtgeld erforderlich" }
         reloadLive()
         stopLocal()
         clearPreview()
@@ -346,19 +466,43 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun reloadLive() {
-        val data = backend.call("v1/live/account")
-        liveBalances.value = data.getJSONObject("balances")
-        livePortfolio.value = data
+        val actual = kraken.balances()
+        val normalized = JSONObject()
+        var equity = zero
+        var allValued = true
+        for (code in actual.keys()) {
+            val asset = when (code) { "ZEUR" -> "EUR"; "XXBT", "XBT" -> "BTC"; "XETH" -> "ETH"; else -> code }
+            val amount = actual.getString(code).toBigDecimalOrNull() ?: zero
+            if (amount <= zero) continue
+            normalized.put(asset, amount.toPlainString())
+            if (asset == "EUR") equity += amount
+            else {
+                val market = pairs.value.firstOrNull { it.base == code && it.symbol.endsWith("/EUR") }
+                val quote = market?.let { quotes.value[it.symbol] }?.takeIf { it.isCurrent() }
+                if (quote == null) allValued = false else equity += quote.bid * amount
+            }
+        }
+        val open = kraken.openOrders()
+        val orders = open.keys().asSequence().map { id ->
+            val item = open.getJSONObject(id)
+            val descr = item.optJSONObject("descr")
+            JSONObject().put("id", id).put("symbol", descr?.optString("pair", "Kraken"))
+                .put("side", descr?.optString("type", "?"))
+                .put("status", item.optString("status", "open"))
+                .put("filled", item.optString("vol_exec", "0"))
+                .put("fee", item.optString("fee", "0")).put("cancelable", true)
+        }.toList()
+        liveBalances.value = normalized
+        liveOrders.value = orders
+        livePortfolio.value = JSONObject().put("balances", normalized)
+            .put("equity", if (allValued) equity.toPlainString() else JSONObject.NULL)
+            .put("statistics", JSONObject().put("positions", JSONObject()))
         accountFetched = Instant.now()
-        val rows = data.getJSONArray("orders")
-        liveOrders.value = (0 until rows.length()).map { rows.getJSONObject(it) }
     }
 
-    fun disableLive() = action {
-        backend.call("v1/live/disable", JSONObject())
+    fun disableLive() {
         usePaper()
-        refreshBackend()
-        banner.value = "Echtgeld auf dem Server gesperrt"
+        banner.value = "Echtgeldansicht geschlossen; Kraken-Schlüssel bleibt gespeichert"
     }
 
     fun setNotices(enabled: Boolean) {
@@ -367,7 +511,7 @@ internal class DeskModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancel(id: String) = action {
-        backend.call("v1/live/cancel", JSONObject().put("id", id))
+        kraken.cancel(id)
         reloadLive()
         banner.value = "Stornierung an Kraken übermittelt"
     }
