@@ -12,6 +12,8 @@
 
 ## Meme Radar, Whale Watch und Handelsgrenzen
 
+Zusätzlich gibt es den **Kraken Sniper Scout** als rein beobachtenden Listingvergleich: Beim ersten Scan wird die Liste aktueller Kraken-EUR-Märkte lokal gespeichert, spätere Scans markieren tatsächlich neu hinzugekommene Paare seit der vorherigen Momentaufnahme. Das ist **kein** DEX-Sniper und **kein** automatischer Kauf.
+
 Die App nutzt für den Scanner ausschließlich echte Kraken-Daten: `AssetPairs` (handelbare EUR-Paare), `Depth` (25 beste Orderbuchstufen), `Trades` (historische Kraken-Ausführungen) und `Ticker/OHLC` (Volatilität, Liquidität und Kurse). Der Scanner zeigt Orderbuchvolumen, aggressives Kaufverhältnis und große beobachtete Trades. **Dies sind keine On-Chain-Wale oder Wallet-Bestände**. Für Solana-Mint-Adressen gibt es nun zusätzlich den **DEX SCOUT**: Er liest DEX Screener (`token-pairs/v1/solana/{mint}`) und die öffentlichen Solana-RPC-Endpunkte `getAccountInfo`, `getTokenSupply`, `getTokenLargestAccounts`. Er zeigt DEX-Liquidität, 24h-Volumen, Handelstransaktionen, Mint- und Freeze-Berechtigungen und den Anteil der größten zehn **Token-Konten** (nicht zehn eindeutig verschiedene Menschen/Wallets). Bei RPC-Sperren stehen nicht verifizierte Angaben ausdrücklich auf **Unbekannt**. **LP-Lock-Status kann aus diesen Daten nicht sicher bestimmt werden und bleibt unverifiziert.** Der Scanner ist read-only, er kann keine DEX-Käufe ausführen und sendet **keine Kraken-Schlüssel** an DEX Screener oder Solana. Social-Media-Sentiment-Daten werden weiterhin nicht vorgetäuscht. Token ohne Kraken-Listing können nicht mit dem Kraken-Key gehandelt werden; ein DEX-Sniper erfordert grundsätzlich eine separate Wallet, Infrastruktur und on-chain Prüfungen.
 
 ## Privater Release-Build
