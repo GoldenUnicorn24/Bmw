@@ -249,8 +249,7 @@ private fun Dashboard(model: DeskModel, live: Boolean) {
     Section("Handelsstatus") {
         Metric("Verfügbar", eur(paper.portfolio.cash))
         Metric("Papierbot", if (bot) "Läuft in der App" else "Pausiert")
-        Metric(if (state?.optString("bot_mode") == "live") "Echtgeld-Serverbot" else "Papier-Serverbot",
-            state?.optString("bot_status").orEmpty().ifBlank { "Unbestätigt" })
+        Metric("Echtgeld", "Nur über direkte Kraken-API im signierten Release")
     }
     Section("Virtuelle Positionen") {
         if (paper.portfolio.holdings.isEmpty()) Text("Keine offenen Positionen", color = Muted)
