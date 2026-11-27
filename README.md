@@ -1,21 +1,10 @@
-# Executive Black v0.9 – BMW-Karte vorne, Bankkarte im Hintergrund
+# Bitcoin Lottery 0.1
+Native Android experimental Bitcoin SHA-256d solo miner. No cloud hashing, fake balances, keys or payments. It connects to a user-selected Stratum V1 pool, constructs real headers, searches nonces and submits valid shares/block candidates. Default endpoint: stratum.ckpool.org:3333. Use your own public BTC receiving address; never enter a seed or private key. Solo CKPool may not report or may disconnect extremely low-hashrate workers. No payout unless a valid block is found and accepted. Verify pool fee, payout terms and blockchain independently. Plain TCP is not authenticated/encrypted; use trusted networks only.
 
-Private Android-App im BMW-Executive-Design. Beim Öffnen erscheint die BMW-Karte im Vollbild. Bezahlt wird am Terminal mit der echten Bankkarte (z. B. Revolut Mastercard), die in **Google Wallet** hinterlegt ist – Google Wallet arbeitet dabei im Hintergrund.
+Manual opt-in, 1 CPU thread by default, 4 max. Stops when app is no longer visible, battery temperature >=42°C or Android thermal status moderate or higher. These controls do not guarantee battery safety; stop if hot. No wake lock or background service. Not intended for profit.
 
-## So funktioniert es
-1. Executive Black öffnen (oder Schnelleinstellungs-Kachel **Executive Card**).
-2. Handy entsperrt ans Terminal halten.
-3. Android leitet die NFC-Anfrage an die Standard-Zahlungs-App Google Wallet weiter. Google Wallet blendet kurz seine Bestätigung ein, danach ist wieder die BMW-Karte zu sehen.
+## Build
+GitHub Actions workflow Bitcoin Lottery Android runs Gradle unit tests (including Bitcoin genesis block test), builds a debug APK and publishes it as an artifact if successful. Android Studio: open this branch as a standalone Gradle project, JDK 17, Android SDK 35, Gradle 8.9. This branch is intentionally isolated from the existing Bmw trading project; main is unchanged.
 
-Die App zeigt live an, ob alles bereit ist (NFC an, Displaysperre, Google Wallet installiert, Google Wallet als Standard – sofern Android das preisgibt) und führt mit je einem Knopf zur passenden Einstellung.
-
-## Grenzen (technisch, nicht lösbar per Code)
-- Eine eigene Bezahlfunktion ohne Google Wallet bräuchte eine Mastercard-Tokenisierung (MDES) und eine Freigabe durch die Bank. Revolut stellt Karten nur in Google Wallet, Samsung Wallet und der eigenen App bereit.
-- Die kurze Bestätigung von Google Wallet nach der Zahlung kann keine App unterdrücken.
-- Die App sieht keine Zahlung und speichert keine Kartendaten. Sie enthält seit v0.9 keinen NFC-Kartenemulations-Dienst mehr und kann Google Wallet deshalb nicht stören.
-
-## Download
-Jeder Push baut eine APK und veröffentlicht sie als Release **dev-latest**:
-https://github.com/GoldenUnicorn24/Bmw/releases/tag/dev-latest
-
-Privates Designkonzept, nicht mit BMW, Google oder Revolut verbunden.
+## Limitations
+Experimental source; live-pool acceptance and on-device performance not yet verified. No auto-reconnect, encrypted Stratum, independent block-template verification, GPU or ASIC support. The pool must be trusted to pay your address. Hashrate and probability are estimates from actual local work, not a balance.

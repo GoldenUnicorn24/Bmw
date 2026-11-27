@@ -1,7 +1,0 @@
-<resources>
-    <style name="Theme.NightDesk" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#0B1014</item>
-        <item name="android:colorAccent">#63E6B1</item>
-        <item name="android:windowLightStatusBar">false</item>
-    </style>
-</resources>

@@ -1,28 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <!-- Only to read NFC state and the default payment app. This app has no card emulation service. -->
-  <uses-permission android:name="android.permission.NFC"/>
-  <uses-feature android:name="android.hardware.nfc" android:required="false"/>
-  <queries>
-    <package android:name="com.google.android.apps.walletnfcrel"/>
-    <package android:name="com.revolut.revolut"/>
-    <intent><action android:name="android.service.quickaccesswallet.action.VIEW_WALLET"/></intent>
-  </queries>
-  <application android:label="Executive Black" android:icon="@drawable/ic_executive"
-      android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false"
-      android:usesCleartextTraffic="false">
-    <activity android:name=".MainActivity" android:exported="true"
-        android:resizeableActivity="true" android:launchMode="singleTask"
-        android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN"/>
-        <category android:name="android.intent.category.LAUNCHER"/>
-      </intent-filter>
-    </activity>
-    <service android:name=".CardTileService" android:label="Executive Card"
-        android:icon="@drawable/ic_executive" android:exported="true"
-        android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
-      <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
-    </service>
-  </application>
-</manifest>
+<uses-permission android:name="android.permission.INTERNET"/>
+<application android:label="Bitcoin Lottery" android:allowBackup="false" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="true">
+<activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+</application></manifest>
