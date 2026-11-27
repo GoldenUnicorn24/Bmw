@@ -17,6 +17,11 @@ public final class Bitcoin {
  static byte[] words(byte[] b){if(b.length%4!=0)throw new IllegalArgumentException();byte[] a=b.clone();for(int i=0;i<a.length;i+=4){a[i]=b[i+3];a[i+1]=b[i+2];a[i+2]=b[i+1];a[i+3]=b[i];}return a;}
  static byte[] cat(byte[] a,byte[] b){byte[] c=Arrays.copyOf(a,a.length+b.length);System.arraycopy(b,0,c,a.length,b.length);return c;}
  static byte[] sha2(MessageDigest md,byte[] b){return md.digest(md.digest(b));}
+ // Reuse two 32-byte buffers for the hashing hot path.
+ static void sha2Into(MessageDigest md,byte[] header,byte[] scratch,byte[] out)throws java.security.DigestException{
+  md.update(header);md.digest(scratch,0,32);
+  md.update(scratch);md.digest(out,0,32);
+ }
  static BigInteger target(String bits){long x=Long.parseLong(bits,16);int exp=(int)(x>>>24);long mant=x&0x7fffff;if((x&0x800000)!=0||mant==0||exp>34)throw new IllegalArgumentException("nBits");BigInteger t=BigInteger.valueOf(mant).shiftLeft(8*(exp-3));if(t.signum()<=0||t.compareTo(MAX)>0)throw new IllegalArgumentException("target");return t;}
  static void put32(byte[] b,int at,long v){for(int i=0;i<4;i++)b[at+i]=(byte)(v>>>(8*i));}
  static byte[] header(String version,String prev,byte[] merkle,String time,String bits){

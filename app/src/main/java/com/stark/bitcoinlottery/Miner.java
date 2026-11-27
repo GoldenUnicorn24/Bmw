@@ -20,28 +20,40 @@ final class Miner {
  volatile BufferedWriter writer;
  volatile BigInteger shareTarget=Bitcoin.DIFF1,networkTarget;
  final String user,host; final int port,threads; final Listener listener;
+ volatile int activeThreads;
+ final AtomicLong reconnects=new AtomicLong();
  final ExecutorService exec;
  volatile String extra1; volatile int extraSize;
- Miner(String host,int port,String user,int threads,Listener listener){this.host=host;this.port=port;this.user=user;this.threads=threads;this.listener=listener;exec=Executors.newFixedThreadPool(threads+1);}
+ Miner(String host,int port,String user,int threads,Listener listener){this.host=host;this.port=port;this.user=user;this.threads=Math.max(1,Math.min(7,threads));this.activeThreads=this.threads;this.listener=listener;exec=Executors.newFixedThreadPool(this.threads+1);}
  static JSONArray arr(Object... values){JSONArray a=new JSONArray();for(Object o:values)a.put(o);return a;}
  synchronized void send(int id,String method,JSONArray p)throws Exception{
   if(!running||writer==null)throw new IOException("not connected");
   JSONObject m=new JSONObject();m.put("id",id);m.put("method",method);m.put("params",p);
   writer.write(m.toString());writer.newLine();writer.flush();
  }
- void start(){running=true;exec.execute(this::connect);for(int i=0;i<threads;i++)exec.execute(this::mine);}
+ void start(){running=true;exec.execute(this::connect);for(int i=0;i<threads;i++){final int worker=i;exec.execute(()->mine(worker));}}
  void stop(){running=false;job.set(null);try{if(socket!=null)socket.close();}catch(IOException ignored){}exec.shutdownNow();}
  void connect(){
+  int delay=2;
+  while(running){
   try{
+   authorized=false;job.set(null);networkTarget=null;extra1=null;shareTarget=Bitcoin.DIFF1;submissions.clear();
    listener.event("Verbinde mit "+host);
    Socket s=new Socket();socket=s;if(!running){s.close();return;}
-   s.connect(new InetSocketAddress(host,port),12000);s.setSoTimeout(90000);s.setTcpNoDelay(true);
+   s.connect(new InetSocketAddress(host,port),12000);s.setSoTimeout(180000);s.setTcpNoDelay(true);
    writer=new BufferedWriter(new OutputStreamWriter(s.getOutputStream(),java.nio.charset.StandardCharsets.UTF_8));
    BufferedReader reader=new BufferedReader(new InputStreamReader(s.getInputStream(),java.nio.charset.StandardCharsets.UTF_8));
-   send(1,"mining.subscribe",arr("BitcoinLottery/0.1"));
-   String line;while(running&&(line=reader.readLine())!=null){if(line.length()>200000)throw new IOException("oversized message");onMessage(new JSONObject(line));}
-   if(running)listener.event("Pool-Verbindung geschlossen. Neu starten.");
-  }catch(Exception e){if(running)listener.event("Verbindung beendet: "+e.getMessage());}finally{stop();}
+   send(1,"mining.subscribe",arr("BitcoinLottery/0.2"));
+   String line;while(running&&(line=reader.readLine())!=null){if(line.length()>200000)throw new IOException("oversized message");onMessage(new JSONObject(line));if(authorized)delay=2;}
+   if(running)listener.event("Pool-Verbindung geschlossen.");
+  }catch(Exception e){if(running)listener.event("Pool: "+e.getMessage());}
+  finally{authorized=false;job.set(null);networkTarget=null;try{if(socket!=null)socket.close();}catch(IOException ignored){}writer=null;}
+  if(!running)break;
+  reconnects.incrementAndGet();listener.event("Neuverbinden in "+delay+" s");
+  try{Thread.sleep(delay*1000L);}catch(InterruptedException e){break;}
+  delay=Math.min(60,delay*2);
+  }
+  stop();
  }
  void onMessage(JSONObject m)throws Exception{
   String method=m.optString("method","");JSONArray p=m.optJSONArray("params");
@@ -57,7 +69,7 @@ final class Miner {
   if(method.equals("client.reconnect"))throw new IOException("Pool verlangt Neuverbindung");
   int id=m.optInt("id",-1);
   if(id==1){JSONArray r=m.getJSONArray("result");extra1=r.getString(1);extraSize=r.getInt(2);if(extraSize<1||extraSize>32)throw new IOException("extranonce length");send(2,"mining.authorize",arr(user,"x"));return;}
-  if(id==2){if(!m.optBoolean("result",false))throw new IOException("Wallet vom Pool abgelehnt");authorized=true;listener.event("Autorisiert. Warte auf Arbeit / mine.");return;}
+  if(id==2){if(!m.optBoolean("result",false)){listener.event("Wallet vom Pool abgelehnt. Adresse prüfen.");stop();return;}authorized=true;listener.event("Autorisiert. Warte auf Arbeit / mine.");return;}
   Boolean block=submissions.remove(id);
   if(block!=null){if(m.optBoolean("result",false)){accepted.incrementAndGet();listener.event(block?"Block-Kandidat vom Pool angenommen! Blockchain separat prüfen.":"Share angenommen");}else{rejected.incrementAndGet();listener.event("Share abgelehnt: "+m.optString("error",""));}}
  }
@@ -77,23 +89,27 @@ final class Miner {
    return Bitcoin.header(version,prev,root,time,bits);
   }
  }
- void mine(){
+ void mine(int worker){
   try{
    MessageDigest md=MessageDigest.getInstance("SHA-256");Job current=null;String extra=null;byte[] header=null;long nonce=0;int pending=0;
+   byte[] scratch=new byte[32],digest=new byte[32],bestLimit=Bitcoin.targetBytes(best.get());
+   android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
    try{while(running){
-    Job j=job.get();if(j==null||!authorized){Thread.sleep(100);continue;}
+    Job j=job.get();if(j==null||!authorized||worker>=activeThreads){if(pending>0){hashes.addAndGet(pending);pending=0;}Thread.sleep(100);continue;}
     if(j!=current||nonce>0xffffffffL){current=j;extra=j.nextExtra();header=j.makeHeader(md,extra);nonce=0;}
     Bitcoin.put32(header,76,nonce);
-    byte[] digest=Bitcoin.sha2(md,header);pending++;
-    if(pending>=256){hashes.addAndGet(pending);pending=0;}
-    if(Bitcoin.cmpHash(digest,Bitcoin.targetBytes(best.get()))<0){
-     BigInteger value=new BigInteger(1,Bitcoin.reverse(digest));best.accumulateAndGet(value,BigInteger::min);
+    Bitcoin.sha2Into(md,header,scratch,digest);pending++;
+    if(pending>=512){hashes.addAndGet(pending);pending=0;bestLimit=Bitcoin.targetBytes(best.get());}
+    if(Bitcoin.cmpHash(digest,bestLimit)<0){
+     BigInteger value=new BigInteger(1,Bitcoin.reverse(digest));bestLimit=Bitcoin.targetBytes(best.accumulateAndGet(value,BigInteger::min));
     }
     if(Bitcoin.cmpHash(digest,j.submitTarget)<=0&&job.get()==j&&running){
      boolean block=Bitcoin.cmpHash(digest,j.blockTarget)<=0;
      int id=ids.getAndIncrement();submissions.put(id,block);
-     send(id,"mining.submit",arr(user,j.id,extra,j.time,String.format(Locale.ROOT,"%08x",nonce)));
-     if(block)listener.event("Block-Kandidat gesendet; warte auf Pool-Bestätigung.");
+     try{
+      synchronized(this){if(job.get()==j&&authorized&&running){send(id,"mining.submit",arr(user,j.id,extra,j.time,String.format(Locale.ROOT,"%08x",nonce)));if(block)listener.event("Block-Kandidat gesendet; warte auf Pool-Bestätigung.");}else submissions.remove(id);}
+     }catch(IOException e){submissions.remove(id);if(socket!=null)try{socket.close();}catch(IOException ignored){}}
+
     }
     nonce++;
    }}finally{hashes.addAndGet(pending);}
